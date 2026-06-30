@@ -112,6 +112,40 @@ graph TD
 
 ---
 
+## Installation on a New Mac
+
+To install and run this Quick Action on a new Mac, follow these steps:
+
+### 1. Download the Workflow
+1. Clone this repository or download the source code zip file.
+2. Locate the [Add to Reminders.workflow](file:///Users/suddharay/Library/Mobile%20Documents/com~apple~CloudDocs/Mac%20Projects/Add%20to%20Reminders/Add%20to%20Reminders.workflow) bundle.
+
+### 2. Install the Quick Action
+You can install the Quick Action automatically or manually:
+
+* **Automatic Installation (Recommended)**:
+  * Double-click [Add to Reminders.workflow](file:///Users/suddharay/Library/Mobile%20Documents/com~apple~CloudDocs/Mac%20Projects/Add%20to%20Reminders/Add%20to%20Reminders.workflow) in Finder.
+  * macOS will prompt you: *"Do you want to install this Quick Action?"* 
+  * Click **Install**. macOS will automatically copy it to your user's Services directory.
+
+* **Manual Installation**:
+  * Copy or move [Add to Reminders.workflow](file:///Users/suddharay/Library/Mobile%20Documents/com~apple~CloudDocs/Mac%20Projects/Add%20to%20Reminders/Add%20to%20Reminders.workflow) to `~/Library/Services/` by running the following command in Terminal:
+    ```bash
+    cp -R "Add to Reminders.workflow" ~/Library/Services/
+    ```
+
+### 3. Verify Quick Action Activation
+1. Open **System Settings** on your Mac.
+2. Navigate to **Keyboard > Keyboard Shortcuts... > Services**.
+3. Under **Text** or **General**, make sure the checkbox next to **Add to Reminders** is checked.
+
+### 4. Setup Python 3 Dependency
+The script requires `python3` to securely escape prompt payloads and parse JSON/regex. Ensure Python 3 is installed:
+* Open Terminal and run: `python3 --version`.
+* If prompted, install Xcode Command Line Tools to obtain Python 3.
+
+---
+
 ## Editing & Customization
 
 Quick Actions are saved in a hidden folder inside your library directory: `~/Library/Services/`
