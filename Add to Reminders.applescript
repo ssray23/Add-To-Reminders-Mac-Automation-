@@ -26,7 +26,7 @@ on run {input, parameters}
 		
 		do shell script "python3 -c \"import json,sys; print(json.dumps(sys.argv[1]))\" " & quoted form of jsonPrompt & " > /tmp/claude_prompt.json"
 		
-		do shell script "curl -s https://api.anthropic.com/v1/messages -H 'x-api-key: " & apiKey & "' -H 'anthropic-version: 2023-06-01' -H 'content-type: application/json' -d '{\"model\":\"claude-sonnet-4-6\",\"max_tokens\":30,\"messages\":[{\"role\":\"user\",\"content\":'\"$(cat /tmp/claude_prompt.json)\"'}]}' > /tmp/claude_response.json"
+		do shell script "curl -s https://api.anthropic.com/v1/messages -H 'x-api-key: " & apiKey & "' -H 'anthropic-version: 2023-06-01' -H 'content-type: application/json' -d '{\"model\":\"claude-sonnet-4-6\",\"max_tokens\":100,\"messages\":[{\"role\":\"user\",\"content\":'\"$(cat /tmp/claude_prompt.json)\"'}]}' > /tmp/claude_response.json"
 		
 		set dateString to do shell script "python3 -c \"import json,re; t=json.load(open('/tmp/claude_response.json'))['content'][0]['text'].strip(); m=re.search(r'\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}',t); print(m.group() if m else 'NONE')\""
 		
@@ -68,6 +68,13 @@ on run {input, parameters}
 					-- Try AppleScript parsing first, fall back to AI
 					try
 						set theDate to date manualInput
+						if (year of theDate) < 2000 then error "Bad year" -- Force AI fallback for weird parsing like '2'
+						
+						-- Only override time if native parsing succeeded and user didn't provide time
+						if manualInput does not contain ":" then
+							set hours of theDate to 7
+							set minutes of theDate to 0
+						end if
 					on error
 						try
 							set dateString to my parseDateWithAI(manualInput, todayDate, apiKey)
@@ -78,10 +85,6 @@ on run {input, parameters}
 							display dialog "Couldn't parse date: " & aiErr buttons {"OK"} with icon caution
 						end try
 					end try
-					if theDate is not missing value and manualInput does not contain ":" then
-						set hours of theDate to 7
-						set minutes of theDate to 0
-					end if
 				end if
 			end try
 		end if
@@ -157,7 +160,7 @@ end splitText
 on parseDateWithAI(inputText, todayDate, apiKey)
 	set parsePrompt to "Today's date is " & todayDate & ". Convert this to a date and time: '" & inputText & "'. Reply with ONLY YYYY-MM-DD HH:MM (24-hour). If no time mentioned, use 07:00. If you cannot determine a date, reply NONE."
 	do shell script "python3 -c \"import json,sys; print(json.dumps(sys.argv[1]))\" " & quoted form of parsePrompt & " > /tmp/claude_prompt.json"
-	do shell script "curl -s https://api.anthropic.com/v1/messages -H 'x-api-key: " & apiKey & "' -H 'anthropic-version: 2023-06-01' -H 'content-type: application/json' -d '{\"model\":\"claude-sonnet-4-6\",\"max_tokens\":30,\"messages\":[{\"role\":\"user\",\"content\":'\"$(cat /tmp/claude_prompt.json)\"'}]}' > /tmp/claude_response.json"
+	do shell script "curl -s https://api.anthropic.com/v1/messages -H 'x-api-key: " & apiKey & "' -H 'anthropic-version: 2023-06-01' -H 'content-type: application/json' -d '{\"model\":\"claude-sonnet-4-6\",\"max_tokens\":100,\"messages\":[{\"role\":\"user\",\"content\":'\"$(cat /tmp/claude_prompt.json)\"'}]}' > /tmp/claude_response.json"
 	return do shell script "python3 -c \"import json,re; t=json.load(open('/tmp/claude_response.json'))['content'][0]['text'].strip(); m=re.search(r'\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}',t); print(m.group() if m else 'NONE')\""
 end parseDateWithAI
 
