@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AMApplicationBuild</key>
+	<string>534</string>
+	<key>AMApplicationVersion</key>
+	<string>2.10</string>
+	<key>AMDocumentVersion</key>
+	<string>2</string>
+	<key>actions</key>
+	<array>
+		<dict>
+			<key>action</key>
+			<dict>
+				<key>AMAccepts</key>
+				<dict>
+					<key>Container</key>
+					<string>List</string>
+					<key>Optional</key>
+					<true/>
+					<key>Types</key>
+					<array>
+						<string>com.apple.applescript.object</string>
+					</array>
+				</dict>
+				<key>AMActionVersion</key>
+				<string>1.0.2</string>
+				<key>AMApplication</key>
+				<array>
+					<string>Automator</string>
+				</array>
+				<key>AMParameterProperties</key>
+				<dict>
+					<key>source</key>
+					<dict/>
+				</dict>
+				<key>AMProvides</key>
+				<dict>
+					<key>Container</key>
+					<string>List</string>
+					<key>Types</key>
+					<array>
+						<string>com.apple.applescript.object</string>
+					</array>
+				</dict>
+				<key>ActionBundlePath</key>
+				<string>/System/Library/Automator/Run AppleScript.action</string>
+				<key>ActionName</key>
+				<string>Run AppleScript</string>
+				<key>ActionParameters</key>
+				<dict>
+					<key>source</key>
+					<string>-- Place the Automator Quick Action (.workflow) at: ~/Library/Services/on run {input, parameters}	try		set theText to ""		try			set theText to item 1 of input as text		on error			try				set theText to input as text			end try		end try				if theText is "" then			display dialog "No text was received. Make sure text is selected before running this." buttons {"OK"}			return input		end if				-- Clean up selected text: trim whitespace, collapse newlines		set theText to do shell script "echo " &amp; quoted form of theText &amp; " | tr '\\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/[[:space:]]\\{2,\\}/ /g'"				set theTitle to text returned of (display dialog "Enter a title for your reminder:" default answer theText buttons {"Cancel", "Create"} default button "Create" with icon note)				set todayDate to do shell script "date '+%Y-%m-%d'"		set apiKey to do shell script "security find-generic-password -a $USER -s anthropic_api_key -w"		set jsonPrompt to "Today's date is " &amp; todayDate &amp; ". Extract the date and time mentioned in this text. Resolve relative references like 'tomorrow', 'next week', etc. relative to today. Reply with ONLY in format YYYY-MM-DD HH:MM (24-hour). If a specific time is mentioned, use it. If no time is mentioned or can be reasoned, default to 07:00. If no date is found at all, reply with NONE. Text: " &amp; theText				do shell script "python3 -c \"import json,sys; print(json.dumps(sys.argv[1]))\" " &amp; quoted form of jsonPrompt &amp; " &gt; /tmp/claude_prompt.json"				do shell script "curl -s https://api.anthropic.com/v1/messages -H 'x-api-key: " &amp; apiKey &amp; "' -H 'anthropic-version: 2023-06-01' -H 'content-type: application/json' -d '{\"model\":\"claude-sonnet-4-6\",\"max_tokens\":100,\"messages\":[{\"role\":\"user\",\"content\":'\"$(cat /tmp/claude_prompt.json)\"'}]}' &gt; /tmp/claude_response.json"				set dateString to do shell script "python3 -c \"import json,re; t=json.load(open('/tmp/claude_response.json'))['content'][0]['text'].strip(); m=re.search(r'\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}',t); print(m.group() if m else 'NONE')\""				-- Extract URL from selected text if present		set theURL to do shell script "echo " &amp; quoted form of theText &amp; " | grep -oE 'https?://[^ ]+' | head -1 || true"				set theDate to missing value		if dateString is not "NONE" then			try				set dateTimeParts to my splitText(dateString, " ")				set datePart to item 1 of dateTimeParts				set timePart to item 2 of dateTimeParts				set dateParts to my splitText(datePart, "-")				set timeParts to my splitText(timePart, ":")								set theDate to current date				set time of theDate to 0				set day of theDate to 1				set year of theDate to (item 1 of dateParts) as integer				set month of theDate to (item 2 of dateParts) as integer				set day of theDate to (item 3 of dateParts) as integer				set hours of theDate to (item 1 of timeParts) as integer				set minutes of theDate to (item 2 of timeParts) as integer			on error				try					set dateInput to text returned of (display dialog "AI found '" &amp; dateString &amp; "' but couldn't parse it. Enter manually:" default answer dateString)					set dateString to my parseDateWithAI(dateInput, todayDate, apiKey)					if dateString is not "NONE" then						set theDate to my parseDateString(dateString)					end if				end try			end try		else			set tomorrowDate to do shell script "date -v+1d '+%d/%m/%Y 7:00 AM'"			try				set dateResult to display dialog "No date found in text. Enter a due date:" default answer tomorrowDate buttons {"No Date", "Cancel", "Set Date"} default button "Set Date" with icon note				if button returned of dateResult is "Set Date" then					set manualInput to text returned of dateResult					-- Try AppleScript parsing first, fall back to AI					try						set theDate to date manualInput						if (year of theDate) &lt; 2000 then error "Bad year" -- Force AI fallback for weird parsing like '2'												-- Only override time if native parsing succeeded and user didn't provide time						if manualInput does not contain ":" then							set hours of theDate to 7							set minutes of theDate to 0						end if					on error						try							set dateString to my parseDateWithAI(manualInput, todayDate, apiKey)							if dateString is not "NONE" then								set theDate to my parseDateString(dateString)							end if						on error aiErr							display dialog "Couldn't parse date: " &amp; aiErr buttons {"OK"} with icon caution						end try					end try				end if			end try		end if				-- Build reminder properties		if theURL is not "" then			if theDate is not missing value then				tell application "Reminders" to make new reminder with properties {name:theTitle, body:theURL, due date:theDate}			else				tell application "Reminders" to make new reminder with properties {name:theTitle, body:theURL}			end if		else			if theDate is not missing value then				tell application "Reminders" to make new reminder with properties {name:theTitle, due date:theDate}			else				tell application "Reminders" to make new reminder with properties {name:theTitle}			end if		end if				-- Show confirmation with friendly date format		if theDate is not missing value then			-- Determine relative day			set todayStr to short date string of (current date)			set tomorrowStr to short date string of ((current date) + 1 * days)			set reminderDateStr to short date string of theDate						if reminderDateStr = todayStr then				set dayLabel to "Today"			else if reminderDateStr = tomorrowStr then				set dayLabel to "Tomorrow"			else				set dayLabel to reminderDateStr			end if						-- Format time as 12-hour			set h to hours of theDate			set m to text -2 thru -1 of ("0" &amp; (minutes of theDate))			if h &gt; 12 then				set friendlyTime to (h - 12) &amp; ":" &amp; m &amp; " PM"			else if h = 12 then				set friendlyTime to "12:" &amp; m &amp; " PM"			else if h = 0 then				set friendlyTime to "12:" &amp; m &amp; " AM"			else				set friendlyTime to h &amp; ":" &amp; m &amp; " AM"			end if						display notification dayLabel &amp; ", " &amp; friendlyTime with title theTitle		else			display notification "No due date" with title theTitle		end if				-- Clean up temp files		do shell script "rm -f /tmp/claude_prompt.json /tmp/claude_response.json"		return input			on error errMsg number errNum		if errNum is not -128 then			display dialog "Error " &amp; errNum &amp; ": " &amp; errMsg buttons {"OK"} with icon stop		end if		return input	end tryend runon splitText(theText, theDelimiter)	set oldDelims to AppleScript's text item delimiters	set AppleScript's text item delimiters to theDelimiter	set theItems to text items of theText	set AppleScript's text item delimiters to oldDelims	return theItemsend splitTexton parseDateWithAI(inputText, todayDate, apiKey)	set parsePrompt to "Today's date is " &amp; todayDate &amp; ". Convert this to a date and time: '" &amp; inputText &amp; "'. Reply with ONLY YYYY-MM-DD HH:MM (24-hour). If no time mentioned, use 07:00. If you cannot determine a date, reply NONE."	do shell script "python3 -c \"import json,sys; print(json.dumps(sys.argv[1]))\" " &amp; quoted form of parsePrompt &amp; " &gt; /tmp/claude_prompt.json"	do shell script "curl -s https://api.anthropic.com/v1/messages -H 'x-api-key: " &amp; apiKey &amp; "' -H 'anthropic-version: 2023-06-01' -H 'content-type: application/json' -d '{\"model\":\"claude-sonnet-4-6\",\"max_tokens\":100,\"messages\":[{\"role\":\"user\",\"content\":'\"$(cat /tmp/claude_prompt.json)\"'}]}' &gt; /tmp/claude_response.json"	return do shell script "python3 -c \"import json,re; t=json.load(open('/tmp/claude_response.json'))['content'][0]['text'].strip(); m=re.search(r'\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}',t); print(m.group() if m else 'NONE')\""end parseDateWithAIon parseDateString(dateString)	set dateTimeParts to my splitText(dateString, " ")	set datePart to item 1 of dateTimeParts	set timePart to item 2 of dateTimeParts	set dateParts to my splitText(datePart, "-")	set timeParts to my splitText(timePart, ":")		set theDate to current date	set time of theDate to 0	set day of theDate to 1	set year of theDate to (item 1 of dateParts) as integer	set month of theDate to (item 2 of dateParts) as integer	set day of theDate to (item 3 of dateParts) as integer	set hours of theDate to (item 1 of timeParts) as integer	set minutes of theDate to (item 2 of timeParts) as integer	return theDateend parseDateString</string>
+				</dict>
+				<key>BundleIdentifier</key>
+				<string>com.apple.Automator.RunScript</string>
+				<key>CFBundleVersion</key>
+				<string>1.0.2</string>
+				<key>CanShowSelectedItemsWhenRun</key>
+				<false/>
+				<key>CanShowWhenRun</key>
+				<true/>
+				<key>Category</key>
+				<array>
+					<string>AMCategoryUtilities</string>
+				</array>
+				<key>Class Name</key>
+				<string>RunScriptAction</string>
+				<key>InputUUID</key>
+				<string>D76923ED-4B48-46FF-A0CC-6E33D1710C4A</string>
+				<key>Keywords</key>
+				<array>
+					<string>Run</string>
+				</array>
+				<key>OutputUUID</key>
+				<string>9DE99991-AAC3-48F7-BBFF-9CFD2ADEBCB4</string>
+				<key>UUID</key>
+				<string>87A1BB76-F68F-41CD-8746-B267C5A3D703</string>
+				<key>UnlocalizedApplications</key>
+				<array>
+					<string>Automator</string>
+				</array>
+				<key>arguments</key>
+				<dict>
+					<key>0</key>
+					<dict>
+						<key>default value</key>
+						<string>on run {input, parameters}
+	
+	(* Your script goes here *)
+	
+	return input
+end run</string>
+						<key>name</key>
+						<string>source</string>
+						<key>required</key>
+						<string>0</string>
+						<key>type</key>
+						<string>0</string>
+						<key>uuid</key>
+						<string>0</string>
+					</dict>
+				</dict>
+				<key>isViewVisible</key>
+				<integer>1</integer>
+				<key>location</key>
+				<string>652.500000:368.000000</string>
+				<key>nibPath</key>
+				<string>/System/Library/Automator/Run AppleScript.action/Contents/Resources/Base.lproj/main.nib</string>
+			</dict>
+			<key>isViewVisible</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+	<key>connectors</key>
+	<dict/>
+	<key>workflowMetaData</key>
+	<dict>
+		<key>applicationBundleIDsByPath</key>
+		<dict/>
+		<key>applicationPaths</key>
+		<array/>
+		<key>backgroundColor</key>
+		<data>
+		YnBsaXN0MDDUAQIDBAUGBwpYJHZlcnNpb25ZJGFyY2hpdmVyVCR0b3BYJG9i
+		amVjdHMSAAGGoF8QD05TS2V5ZWRBcmNoaXZlctEICVRyb290gAGpCwwXGBkk
+		KisyVSRudWxs1Q0ODxAREhMUFRZWJGNsYXNzW05TQ29sb3JOYW1lXE5TQ29s
+		b3JTcGFjZV1OU0NhdGFsb2dOYW1lV05TQ29sb3KACIADEAaAAoAEVlN5c3Rl
+		bV5zeXN0ZW1SZWRDb2xvctYNGhsPHB0SHyAhIiNcTlNDb21wb25lbnRzVU5T
+		UkdCXxASTlNDdXN0b21Db2xvclNwYWNlXxAQTlNMaW5lYXJFeHBvc3VyZYAI
+		RzEgMCAwIDFPEB0wLjk4NTk1NDE2NTUgMCAwLjAyNjk0MDAwODYzABABgAVB
+		MdMlJg0nKClUTlNJRFVOU0lDQxAHgAaAB08RDEgAAAxITGlubwIQAABtbnRy
+		UkdCIFhZWiAHzgACAAkABgAxAABhY3NwTVNGVAAAAABJRUMgc1JHQgAAAAAA
+		AAAAAAAAAAAA9tYAAQAAAADTLUhQICAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+		AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABFjcHJ0AAABUAAAADNkZXNjAAAB
+		hAAAAGx3dHB0AAAB8AAAABRia3B0AAACBAAAABRyWFlaAAACGAAAABRnWFla
+		AAACLAAAABRiWFlaAAACQAAAABRkbW5kAAACVAAAAHBkbWRkAAACxAAAAIh2
+		dWVkAAADTAAAAIZ2aWV3AAAD1AAAACRsdW1pAAAD+AAAABRtZWFzAAAEDAAA
+		ACR0ZWNoAAAEMAAAAAxyVFJDAAAEPAAACAxnVFJDAAAEPAAACAxiVFJDAAAE
+		PAAACAx0ZXh0AAAAAENvcHlyaWdodCAoYykgMTk5OCBIZXdsZXR0LVBhY2th
+		cmQgQ29tcGFueQAAZGVzYwAAAAAAAAASc1JHQiBJRUM2MTk2Ni0yLjEAAAAA
+		AAAAAAAAABJzUkdCIElFQzYxOTY2LTIuMQAAAAAAAAAAAAAAAAAAAAAAAAAA
+		AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWFlaIAAAAAAAAPNRAAEA
+		AAABFsxYWVogAAAAAAAAAAAAAAAAAAAAAFhZWiAAAAAAAABvogAAOPUAAAOQ
+		WFlaIAAAAAAAAGKZAAC3hQAAGNpYWVogAAAAAAAAJKAAAA+EAAC2z2Rlc2MA
+		AAAAAAAAFklFQyBodHRwOi8vd3d3LmllYy5jaAAAAAAAAAAAAAAAFklFQyBo
+		dHRwOi8vd3d3LmllYy5jaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+		AAAAAAAAAAAAAAAAAAAAAABkZXNjAAAAAAAAAC5JRUMgNjE5NjYtMi4xIERl
+		ZmF1bHQgUkdCIGNvbG91ciBzcGFjZSAtIHNSR0IAAAAAAAAAAAAAAC5JRUMg
+		NjE5NjYtMi4xIERlZmF1bHQgUkdCIGNvbG91ciBzcGFjZSAtIHNSR0IAAAAA
+		AAAAAAAAAAAAAAAAAAAAAAAAZGVzYwAAAAAAAAAsUmVmZXJlbmNlIFZpZXdp
+		bmcgQ29uZGl0aW9uIGluIElFQzYxOTY2LTIuMQAAAAAAAAAAAAAALFJlZmVy
+		ZW5jZSBWaWV3aW5nIENvbmRpdGlvbiBpbiBJRUM2MTk2Ni0yLjEAAAAAAAAA
+		AAAAAAAAAAAAAAAAAAAAAAAAAHZpZXcAAAAAABOk/gAUXy4AEM8UAAPtzAAE
+		EwsAA1yeAAAAAVhZWiAAAAAAAEwJVgBQAAAAVx/nbWVhcwAAAAAAAAABAAAA
+		AAAAAAAAAAAAAAAAAAAAAo8AAAACc2lnIAAAAABDUlQgY3VydgAAAAAAAAQA
+		AAAABQAKAA8AFAAZAB4AIwAoAC0AMgA3ADsAQABFAEoATwBUAFkAXgBjAGgA
+		bQByAHcAfACBAIYAiwCQAJUAmgCfAKQAqQCuALIAtwC8AMEAxgDLANAA1QDb
+		AOAA5QDrAPAA9gD7AQEBBwENARMBGQEfASUBKwEyATgBPgFFAUwBUgFZAWAB
+		ZwFuAXUBfAGDAYsBkgGaAaEBqQGxAbkBwQHJAdEB2QHhAekB8gH6AgMCDAIU
+		Ah0CJgIvAjgCQQJLAlQCXQJnAnECegKEAo4CmAKiAqwCtgLBAssC1QLgAusC
+		9QMAAwsDFgMhAy0DOANDA08DWgNmA3IDfgOKA5YDogOuA7oDxwPTA+AD7AP5
+		BAYEEwQgBC0EOwRIBFUEYwRxBH4EjASaBKgEtgTEBNME4QTwBP4FDQUcBSsF
+		OgVJBVgFZwV3BYYFlgWmBbUFxQXVBeUF9gYGBhYGJwY3BkgGWQZqBnsGjAad
+		Bq8GwAbRBuMG9QcHBxkHKwc9B08HYQd0B4YHmQesB78H0gflB/gICwgfCDII
+		RghaCG4IggiWCKoIvgjSCOcI+wkQCSUJOglPCWQJeQmPCaQJugnPCeUJ+woR
+		CicKPQpUCmoKgQqYCq4KxQrcCvMLCwsiCzkLUQtpC4ALmAuwC8gL4Qv5DBIM
+		KgxDDFwMdQyODKcMwAzZDPMNDQ0mDUANWg10DY4NqQ3DDd4N+A4TDi4OSQ5k
+		Dn8Omw62DtIO7g8JDyUPQQ9eD3oPlg+zD88P7BAJECYQQxBhEH4QmxC5ENcQ
+		9RETETERTxFtEYwRqhHJEegSBxImEkUSZBKEEqMSwxLjEwMTIxNDE2MTgxOk
+		E8UT5RQGFCcUSRRqFIsUrRTOFPAVEhU0FVYVeBWbFb0V4BYDFiYWSRZsFo8W
+		shbWFvoXHRdBF2UXiReuF9IX9xgbGEAYZRiKGK8Y1Rj6GSAZRRlrGZEZtxnd
+		GgQaKhpRGncanhrFGuwbFBs7G2MbihuyG9ocAhwqHFIcexyjHMwc9R0eHUcd
+		cB2ZHcMd7B4WHkAeah6UHr4e6R8THz4faR+UH78f6iAVIEEgbCCYIMQg8CEc
+		IUghdSGhIc4h+yInIlUigiKvIt0jCiM4I2YjlCPCI/AkHyRNJHwkqyTaJQkl
+		OCVoJZclxyX3JicmVyaHJrcm6CcYJ0kneierJ9woDSg/KHEooijUKQYpOClr
+		KZ0p0CoCKjUqaCqbKs8rAis2K2krnSvRLAUsOSxuLKIs1y0MLUEtdi2rLeEu
+		Fi5MLoIuty7uLyQvWi+RL8cv/jA1MGwwpDDbMRIxSjGCMbox8jIqMmMymzLU
+		Mw0zRjN/M7gz8TQrNGU0njTYNRM1TTWHNcI1/TY3NnI2rjbpNyQ3YDecN9c4
+		FDhQOIw4yDkFOUI5fzm8Ofk6Njp0OrI67zstO2s7qjvoPCc8ZTykPOM9Ij1h
+		PaE94D4gPmA+oD7gPyE/YT+iP+JAI0BkQKZA50EpQWpBrEHuQjBCckK1QvdD
+		OkN9Q8BEA0RHRIpEzkUSRVVFmkXeRiJGZ0arRvBHNUd7R8BIBUhLSJFI10kd
+		SWNJqUnwSjdKfUrESwxLU0uaS+JMKkxyTLpNAk1KTZNN3E4lTm5Ot08AT0lP
+		k0/dUCdQcVC7UQZRUFGbUeZSMVJ8UsdTE1NfU6pT9lRCVI9U21UoVXVVwlYP
+		VlxWqVb3V0RXklfgWC9YfVjLWRpZaVm4WgdaVlqmWvVbRVuVW+VcNVyGXNZd
+		J114XcleGl5sXr1fD19hX7NgBWBXYKpg/GFPYaJh9WJJYpxi8GNDY5dj62RA
+		ZJRk6WU9ZZJl52Y9ZpJm6Gc9Z5Nn6Wg/aJZo7GlDaZpp8WpIap9q92tPa6dr
+		/2xXbK9tCG1gbbluEm5rbsRvHm94b9FwK3CGcOBxOnGVcfByS3KmcwFzXXO4
+		dBR0cHTMdSh1hXXhdj52m3b4d1Z3s3gReG54zHkqeYl553pGeqV7BHtje8J8
+		IXyBfOF9QX2hfgF+Yn7CfyN/hH/lgEeAqIEKgWuBzYIwgpKC9INXg7qEHYSA
+		hOOFR4Wrhg6GcobXhzuHn4gEiGmIzokziZmJ/opkisqLMIuWi/yMY4zKjTGN
+		mI3/jmaOzo82j56QBpBukNaRP5GokhGSepLjk02TtpQglIqU9JVflcmWNJaf
+		lwqXdZfgmEyYuJkkmZCZ/JpomtWbQpuvnByciZz3nWSd0p5Anq6fHZ+Ln/qg
+		aaDYoUehtqImopajBqN2o+akVqTHpTilqaYapoum/adup+CoUqjEqTepqaoc
+		qo+rAqt1q+msXKzQrUStuK4trqGvFq+LsACwdbDqsWCx1rJLssKzOLOutCW0
+		nLUTtYq2AbZ5tvC3aLfguFm40blKucK6O7q1uy67p7whvJu9Fb2Pvgq+hL7/
+		v3q/9cBwwOzBZ8Hjwl/C28NYw9TEUcTOxUvFyMZGxsPHQce/yD3IvMk6ybnK
+		OMq3yzbLtsw1zLXNNc21zjbOts83z7jQOdC60TzRvtI/0sHTRNPG1EnUy9VO
+		1dHWVdbY11zX4Nhk2OjZbNnx2nba+9uA3AXcit0Q3ZbeHN6i3ynfr+A24L3h
+		ROHM4lPi2+Nj4+vkc+T85YTmDeaW5x/nqegy6LzpRunQ6lvq5etw6/vshu0R
+		7ZzuKO6070DvzPBY8OXxcvH/8ozzGfOn9DT0wvVQ9d72bfb794r4Gfio+Tj5
+		x/pX+uf7d/wH/Jj9Kf26/kv+3P9t///SLC0uL1okY2xhc3NuYW1lWCRjbGFz
+		c2VzXE5TQ29sb3JTcGFjZaIwMVxOU0NvbG9yU3BhY2VYTlNPYmplY3TSLC0z
+		NFdOU0NvbG9yojMxAAgAEQAaACQAKQAyADcASQBMAFEAUwBdAGMAbgB1AIEA
+		jgCcAKQApgCoAKoArACuALUAxADRAN4A5AD5AQwBDgEWATYBOAE6ATwBQwFI
+		AU4BUAFSAVQNoA2lDbANuQ3GDckN1g3fDeQN7AAAAAAAAAIBAAAAAAAAADUA
+		AAAAAAAAAAAAAAAAAA3v
+		</data>
+		<key>backgroundColorName</key>
+		<string>systemRedColor</string>
+		<key>inputTypeIdentifier</key>
+		<string>com.apple.Automator.text</string>
+		<key>outputTypeIdentifier</key>
+		<string>com.apple.Automator.nothing</string>
+		<key>presentationMode</key>
+		<integer>11</integer>
+		<key>processesInput</key>
+		<false/>
+		<key>serviceInputTypeIdentifier</key>
+		<string>com.apple.Automator.text</string>
+		<key>serviceOutputTypeIdentifier</key>
+		<string>com.apple.Automator.nothing</string>
+		<key>serviceProcessesInput</key>
+		<false/>
+		<key>systemImageName</key>
+		<string>NSTouchBarAlarm</string>
+		<key>useAutomaticInputType</key>
+		<false/>
+		<key>workflowTypeIdentifier</key>
+		<string>com.apple.Automator.servicesMenu</string>
+	</dict>
+</dict>
+</plist>
