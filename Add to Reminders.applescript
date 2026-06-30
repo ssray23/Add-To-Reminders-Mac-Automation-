@@ -1,4 +1,15 @@
--- Place the Automator Quick Action (.workflow) at: ~/Library/Services/
+-- ==============================================================================
+-- ADD TO REMINDERS (Automator Quick Action)
+-- ==============================================================================
+-- 
+-- IMPORTANT: Saving and Reopening
+-- 1. Automator saves Quick Actions to a hidden folder: ~/Library/Services/
+-- 2. Use File > Save (Cmd + S) to apply changes directly to your system.
+-- 3. Use File > Export ONLY when you want to backup or share the .workflow file.
+-- 4. To reopen this file later, use File > Open Recent in Automator, or go to 
+--    File > Open and press Cmd+Shift+G to search for ~/Library/Services/
+-- 
+-- ==============================================================================
 on run {input, parameters}
 	try
 		set theText to ""
