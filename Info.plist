@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.example.AddToRemindersSwift</string>
+    <key>CFBundleName</key>
+    <string>AddToReminders</string>
+    <key>CFBundleExecutable</key>
+    <string>AddToReminders</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSServices</key>
+    <array>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Add to Reminders</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>processText</string>
+            <key>NSPortName</key>
+            <string>AddToReminders</string>
+            <key>NSRequiredContext</key>
+            <dict/>
+            <key>NSSendTypes</key>
+            <array>
+                <string>NSStringPboardType</string>
+            </array>
+        </dict>
+    </array>
+    <key>NSRemindersUsageDescription</key>
+    <string>Needs access to create reminders from selected text.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>Needs access to create reminders from selected text.</string>
+</dict>
+</plist>
