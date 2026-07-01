@@ -7,6 +7,36 @@ struct ParsedReminderData {
 }
 
 class TextParser {
+    static func extractRelativeDate(from text: String) -> Date? {
+        let pattern = "(?i)\\b(?:in\\s+)?(\\d+)\\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)\\b(?:\\s+from\\s+now)?"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
+        
+        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        if let match = regex.firstMatch(in: text, options: [], range: nsRange) {
+            if let valueRange = Range(match.range(at: 1), in: text),
+               let unitRange = Range(match.range(at: 2), in: text),
+               let value = Int(text[valueRange]) {
+                
+                let unitString = String(text[unitRange]).lowercased()
+                var component = DateComponents()
+                
+                switch unitString {
+                case "m", "min", "mins", "minute", "minutes":
+                    component.minute = value
+                case "h", "hr", "hrs", "hour", "hours":
+                    component.hour = value
+                case "d", "day", "days":
+                    component.day = value
+                default:
+                    break
+                }
+                
+                return Calendar.current.date(byAdding: component, to: Date())
+            }
+        }
+        return nil
+    }
+
     static func parse(text: String) -> ParsedReminderData {
         var extractedDate: Date? = nil
         var extractedURL: URL? = nil
@@ -18,12 +48,23 @@ class TextParser {
             "tomorow": "tomorrow",
             "tmrw": "tomorrow",
             "tmw": "tomorrow",
-            "tonite": "tonight"
+            "tonite": "tonight",
+            "minuts": "minutes",
+            "minut": "minute",
+            "mintes": "minutes",
+            "minits": "minutes",
+            "hurs": "hours",
+            "huors": "hours",
+            "hores": "hours",
+            "houra": "hours",
+            "hra": "hrs"
         ]
         
         for (typo, fix) in typoFixes {
             textForParsing = textForParsing.replacingOccurrences(of: "\\b\(typo)\\b", with: fix, options: [.regularExpression, .caseInsensitive])
         }
+        
+        extractedDate = extractRelativeDate(from: textForParsing)
         
         let types: NSTextCheckingResult.CheckingType = [.date, .link]
         if let detector = try? NSDataDetector(types: types.rawValue) {

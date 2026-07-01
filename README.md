@@ -5,8 +5,8 @@ A lightning-fast, native macOS Quick Action that allows you to highlight text an
 Built entirely in Swift natively, it replaces cloud-based AI parsing with Apple's on-device frameworks for instantaneous results, complete privacy, and zero API costs.
 
 ## Features
-- **Native Date Parsing:** Automatically extracts dates and times from selected text using Apple's incredibly fast `NSDataDetector`.
-- **Smart Fallbacks:** Handles common typos (e.g., "tommorow") and gracefully defaults to 7:00 AM for dates without specific times.
+- **Relative & Absolute Date Parsing:** Supports relative times like "in 3 hours" or "30 mins from now" via custom regex, and falls back to Apple's incredibly fast `NSDataDetector` for absolute dates.
+- **Smart Fallbacks:** Handles common typos (e.g., "tommorow", "minuts", "hurs") and gracefully defaults to 7:00 AM for dates without specific times.
 - **Interactive Prompts:** If no date is found in the text, it prompts you via a native `NSAlert` dialog with a smart default (tomorrow at 7:00 AM) and options for "No Date", "Set Date", or "Cancel".
 - **Instant Visual Feedback:** Displays a sleek, non-blocking SwiftUI HUD animation the moment you trigger the action.
 - **Native Notifications:** Triggers a standard macOS Notification Center alert (featuring the official Apple Reminders icon) displaying the parsed due date and time in a beautiful, human-readable format (e.g., `12th July 2026, 9:00 am` or `Tomorrow, 7:00 am`).
