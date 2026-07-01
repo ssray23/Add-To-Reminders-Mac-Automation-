@@ -13,7 +13,8 @@ import Cocoa
                 NSApp.activate(ignoringOtherApps: true)
                 
                 let alert = NSAlert()
-                alert.messageText = "No date found in text. Enter a due date:"
+                alert.messageText = "When to remind you?"
+                alert.informativeText = "Type naturally (e.g. 'tomorrow at 5pm', 'July 12th repeat daily')."
                 alert.icon = NSWorkspace.shared.icon(forFile: "/System/Applications/Reminders.app")
                 
                 // Buttons are arranged right-to-left in macOS
@@ -22,11 +23,8 @@ import Cocoa
                 alert.addButton(withTitle: "Cancel")
                 
                 let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
-                let formatter = DateFormatter()
-                formatter.dateFormat = "MM/dd/yyyy 7:00 a"
-                if let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) {
-                    input.stringValue = formatter.string(from: tomorrow)
-                }
+                input.placeholderString = "e.g. tomorrow at 7am repeat weekly"
+                input.stringValue = "Tomorrow at 7am"
                 
                 alert.accessoryView = input
                 
@@ -37,7 +35,7 @@ import Cocoa
                     let manualInput = input.stringValue
                     let manualParsed = TextParser.parse(text: manualInput)
                     
-                    let finalData = ParsedReminderData(title: parsedData.title, date: manualParsed.date, url: parsedData.url)
+                    let finalData = ParsedReminderData(title: parsedData.title, date: manualParsed.date, url: parsedData.url, recurrence: parsedData.recurrence ?? manualParsed.recurrence)
                     self.proceedWithSaving(parsedData: finalData)
                 } else if response == .alertSecondButtonReturn {
                     // No Date

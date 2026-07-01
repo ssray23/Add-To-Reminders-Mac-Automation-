@@ -44,6 +44,10 @@ class RemindersManager {
             reminder.addAlarm(EKAlarm(absoluteDate: date))
         }
         
+        if let recurrence = data.recurrence {
+            reminder.recurrenceRules = [recurrence]
+        }
+        
         do {
             try eventStore.save(reminder, commit: true)
             completion(true)

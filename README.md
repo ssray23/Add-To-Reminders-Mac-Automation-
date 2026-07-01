@@ -6,8 +6,9 @@ Built entirely in Swift natively, it replaces cloud-based AI parsing with Apple'
 
 ## Features
 - **Relative & Absolute Date Parsing:** Supports relative times like "in 3 hours" or "30 mins from now" via custom regex, and falls back to Apple's incredibly fast `NSDataDetector` for absolute dates.
-- **Smart Fallbacks:** Handles common typos (e.g., "tommorow", "minuts", "hurs") and gracefully defaults to 7:00 AM for dates without specific times.
-- **Interactive Prompts:** If no date is found in the text, it prompts you via a native `NSAlert` dialog with a smart default (tomorrow at 7:00 AM) and options for "No Date", "Set Date", or "Cancel".
+- **Recurrence Rules:** Natural language parsing for repeating events! Just type "repeat daily", "weekly", "every month", or "yearly" and the reminder will automatically be configured to recur.
+- **Smart Fallbacks:** Handles common typos (e.g., "tommorow", "minuts"), spelled-out ordinals (e.g. "Fourth of July" -> "4th of July"), and gracefully defaults to 7:00 AM for dates without specific times.
+- **Interactive Prompts:** If no date is found in the text, it prompts you via a native `NSAlert` dialog asking "When to remind you?" with a smart default (Tomorrow at 7am) and options for "No Date", "Set Date", or "Cancel".
 - **Instant Visual Feedback:** Displays a sleek, non-blocking SwiftUI HUD animation the moment you trigger the action.
 - **Native Notifications:** Triggers a standard macOS Notification Center alert (featuring the official Apple Reminders icon) displaying the parsed due date and time in a beautiful, human-readable format (e.g., `12th July 2026, 9:00 am` or `Tomorrow, 7:00 am`).
 - **URL Extraction:** Automatically extracts the first URL found in your selected text and adds it to the reminder's metadata.
