@@ -8,11 +8,12 @@ Built entirely in Swift natively, it replaces cloud-based AI parsing with Apple'
 - **Relative & Absolute Date Parsing:** Supports relative times like "in 3 hours", "30 mins from now", "in 2 weeks", "in 6 months from now", or "in 1 year" via custom regex, and falls back to Apple's incredibly fast `NSDataDetector` for absolute dates.
 - **Recurrence Rules:** Natural language parsing for repeating events! Just type "repeat daily", "weekly", "every month", or "yearly" and the reminder will automatically be configured to recur.
 - **Smart Fallbacks:** Handles common typos (e.g., "tommorow", "minuts"), spelled-out ordinals (e.g. "Fourth of July" -> "4th of July"), and gracefully defaults to 7:00 AM for dates without specific times.
-- **Interactive Prompts:** If no date is found in the text, it prompts you via a native `NSAlert` dialog asking "When to remind you?" with a smart default (Tomorrow at 7am) and options for "No Date", "Set Date", or "Cancel".
+- **Global Quick Entry:** Hit `Cmd + R` from anywhere on your Mac to summon a floating Quick Entry UI. Type in a reminder with natural language (e.g. "Buy milk tomorrow at 5pm") and press Enter to instantly add it.
+- **Interactive Prompts:** If no date is found in highlighted text, it prompts you via a native `NSAlert` dialog asking "When to remind you?" with a smart default (Tomorrow at 7am) and options for "No Date", "Set Date", or "Cancel".
 - **Instant Visual Feedback:** Displays a sleek, non-blocking SwiftUI HUD animation the moment you trigger the action.
 - **Native Notifications:** Triggers a standard macOS Notification Center alert (featuring the official Apple Reminders icon) displaying the parsed due date and time in a beautiful, human-readable format (e.g., `12th July 2026, 9:00 am` or `Tomorrow, 7:00 am`).
 - **URL Extraction:** Automatically extracts the first URL found in your selected text and adds it to the reminder's metadata.
-- **Persistent Background Agent:** Runs completely in the background as an `LSUIElement` app. It stays alive after the first launch to ensure subsequent reminders are instantaneous and to seamlessly manage macOS TCC (Permissions) without constant re-prompting.
+- **Persistent Background Agent:** Runs completely in the background as an `LSUIElement` app. It stays alive after the first launch to ensure subsequent reminders are instantaneous, to listen for global hotkeys, and to seamlessly manage macOS TCC (Permissions) without constant re-prompting.
 
 ## Architecture & How the Code Works
 The project operates as a headless macOS Background Service that listens for Pasteboard events. 

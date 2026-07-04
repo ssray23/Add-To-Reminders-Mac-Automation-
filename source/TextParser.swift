@@ -31,7 +31,7 @@ class TextParser {
         return nil
     }
 
-    static func extractRelativeDate(from text: String) -> Date? {
+    static func extractRelativeDate(text: inout String) -> Date? {
         let pattern = "(?i)\\b(?:in\\s+)?(\\d+)\\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|wks|week|weeks|mo|mos|month|months|y|yr|yrs|year|years)\\b(?:\\s+from\\s+now)?"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         
@@ -61,6 +61,10 @@ class TextParser {
                     break
                 }
                 
+                if let range = Range(match.range, in: text) {
+                    text.removeSubrange(range)
+                }
+                
                 return Calendar.current.date(byAdding: component, to: Date())
             }
         }
@@ -75,7 +79,6 @@ class TextParser {
         let recurrenceRule = extractRecurrence(text: &cleanOriginalText)
         
         // Pre-process specifically for the date detector to handle common typos
-        var textForParsing = cleanOriginalText
         let typoFixes = [
             "tommorow": "tomorrow",
             "tomorow": "tomorrow",
@@ -105,49 +108,61 @@ class TextParser {
         ]
         
         for (typo, fix) in typoFixes {
-            textForParsing = textForParsing.replacingOccurrences(of: "\\b\(typo)\\b", with: fix, options: [.regularExpression, .caseInsensitive])
+            cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\\b\(typo)\\b", with: fix, options: [.regularExpression, .caseInsensitive])
         }
         
         for (word, number) in ordinalFixes {
-            textForParsing = textForParsing.replacingOccurrences(of: "\\b\(word)\\b", with: number, options: [.regularExpression, .caseInsensitive])
+            cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\\b\(word)\\b", with: number, options: [.regularExpression, .caseInsensitive])
         }
         
-        extractedDate = extractRelativeDate(from: textForParsing)
+        extractedDate = extractRelativeDate(text: &cleanOriginalText)
         
         let types: NSTextCheckingResult.CheckingType = [.date, .link]
         if let detector = try? NSDataDetector(types: types.rawValue) {
-            let matches = detector.matches(in: textForParsing, options: [], range: NSRange(location: 0, length: textForParsing.utf16.count))
+            let matches = detector.matches(in: cleanOriginalText, options: [], range: NSRange(location: 0, length: cleanOriginalText.utf16.count))
             
-            for match in matches {
-                if match.resultType == .date, extractedDate == nil {
-                    extractedDate = match.date
-                    
-                    if let range = Range(match.range, in: textForParsing) {
-                        let matchedText = String(textForParsing[range]).lowercased()
+            for match in matches.reversed() {
+                if match.resultType == .date {
+                    if extractedDate == nil {
+                        extractedDate = match.date
                         
-                        if let date = extractedDate {
-                            var components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+                        if let range = Range(match.range, in: cleanOriginalText) {
+                            let matchedText = String(cleanOriginalText[range]).lowercased()
                             
-                            // NSDataDetector defaults to 12:00 PM (noon) if no time is provided.
-                            if components.hour == 12 && components.minute == 0 && components.second == 0 {
-                                // Ensure the user didn't actually type "12" as a time
-                                let timeIndicatorRegex = "(?i)(\\b12\\s*(pm|p\\.m\\.|am|a\\.m\\.)\\b|\\b12:00\\b|\\bnoon\\b|\\bat\\s+12\\b)"
-                                let explicitlyMentioned12 = matchedText.range(of: timeIndicatorRegex, options: .regularExpression) != nil
+                            if let date = extractedDate {
+                                var components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
                                 
-                                if !explicitlyMentioned12 {
-                                    components.hour = 7
-                                    extractedDate = Calendar.current.date(from: components)
+                                // NSDataDetector defaults to 12:00 PM (noon) if no time is provided.
+                                if components.hour == 12 && components.minute == 0 && components.second == 0 {
+                                    // Ensure the user didn't actually type "12" as a time
+                                    let timeIndicatorRegex = "(?i)(\\b12\\s*(pm|p\\.m\\.|am|a\\.m\\.)\\b|\\b12:00\\b|\\bnoon\\b|\\bat\\s+12\\b)"
+                                    let explicitlyMentioned12 = matchedText.range(of: timeIndicatorRegex, options: .regularExpression) != nil
+                                    
+                                    if !explicitlyMentioned12 {
+                                        components.hour = 7
+                                        extractedDate = Calendar.current.date(from: components)
+                                    }
                                 }
                             }
                         }
                     }
-                } else if match.resultType == .link, extractedURL == nil {
-                    extractedURL = match.url
+                    
+                    // Always remove date from title
+                    if let range = Range(match.range, in: cleanOriginalText) {
+                        cleanOriginalText.removeSubrange(range)
+                    }
+                } else if match.resultType == .link {
+                    if extractedURL == nil {
+                        extractedURL = match.url
+                    }
                 }
             }
         }
         
-        // Sanitize the original text to be the title (keep dates and URLs in the title)
+        // Remove trailing prepositions like "at", "on", "for", "in" which might have been left behind before the date
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\s+(at|on|for|in|by)\\s*$", with: "", options: .regularExpression)
+        
+        // Sanitize the original text to be the title
         let components = cleanOriginalText.components(separatedBy: .whitespacesAndNewlines)
         var finalTitle = components.filter { !$0.isEmpty }.joined(separator: " ")
         
