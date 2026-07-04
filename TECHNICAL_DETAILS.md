@@ -19,7 +19,7 @@ The application is written natively in Swift and operates as an `LSUIElement` ba
 - **Details**: Instead of relying on a cloud-based LLM or API, the parser uses a combination of custom Regular Expressions and Apple's incredibly fast `NSDataDetector`. 
   - **Recurrence Extraction**: First uses regex to identify and strip out recurrence keywords (e.g., "repeat daily", "every week") mapping them to `EKRecurrenceRule` objects.
   - **Typo & Ordinal Pre-processing**: Corrects common spelling mistakes (e.g., "tommorow") and maps spelled-out ordinals (e.g., "Fourth" -> "4th") so that `NSDataDetector` can interpret them successfully.
-  - **Relative Parsing**: Evaluates phrases like "in 3 hours" manually via regex.
+  - **Relative Parsing**: Evaluates phrases like "in 3 hours", "in 6 months from now", or "in 2 years" manually via regex.
   - **Absolute Parsing & Default Time Overrides**: Passes the scrubbed text to `NSDataDetector` to find dates and URLs. It features advanced edge-case handling to detect when `NSDataDetector` defaults a date to `12:00 PM` (noon). If the user didn't explicitly specify a time (by checking for strings like "12 pm", "noon", or "12:00"), it intercepts the date components and overrides the time to a default of `7:00 AM`.
 
 ### 4. `RemindersManager.swift`

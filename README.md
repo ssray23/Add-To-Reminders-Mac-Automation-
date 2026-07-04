@@ -5,7 +5,7 @@ A lightning-fast, native macOS Quick Action that allows you to highlight text an
 Built entirely in Swift natively, it replaces cloud-based AI parsing with Apple's on-device frameworks for instantaneous results, complete privacy, and zero API costs.
 
 ## Features
-- **Relative & Absolute Date Parsing:** Supports relative times like "in 3 hours" or "30 mins from now" via custom regex, and falls back to Apple's incredibly fast `NSDataDetector` for absolute dates.
+- **Relative & Absolute Date Parsing:** Supports relative times like "in 3 hours", "30 mins from now", "in 2 weeks", "in 6 months from now", or "in 1 year" via custom regex, and falls back to Apple's incredibly fast `NSDataDetector` for absolute dates.
 - **Recurrence Rules:** Natural language parsing for repeating events! Just type "repeat daily", "weekly", "every month", or "yearly" and the reminder will automatically be configured to recur.
 - **Smart Fallbacks:** Handles common typos (e.g., "tommorow", "minuts"), spelled-out ordinals (e.g. "Fourth of July" -> "4th of July"), and gracefully defaults to 7:00 AM for dates without specific times.
 - **Interactive Prompts:** If no date is found in the text, it prompts you via a native `NSAlert` dialog asking "When to remind you?" with a smart default (Tomorrow at 7am) and options for "No Date", "Set Date", or "Cancel".

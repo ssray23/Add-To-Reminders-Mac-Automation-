@@ -32,7 +32,7 @@ class TextParser {
     }
 
     static func extractRelativeDate(from text: String) -> Date? {
-        let pattern = "(?i)\\b(?:in\\s+)?(\\d+)\\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)\\b(?:\\s+from\\s+now)?"
+        let pattern = "(?i)\\b(?:in\\s+)?(\\d+)\\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|wks|week|weeks|mo|mos|month|months|y|yr|yrs|year|years)\\b(?:\\s+from\\s+now)?"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         
         let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
@@ -51,6 +51,12 @@ class TextParser {
                     component.hour = value
                 case "d", "day", "days":
                     component.day = value
+                case "w", "wk", "wks", "week", "weeks":
+                    component.day = value * 7
+                case "mo", "mos", "month", "months":
+                    component.month = value
+                case "y", "yr", "yrs", "year", "years":
+                    component.year = value
                 default:
                     break
                 }
