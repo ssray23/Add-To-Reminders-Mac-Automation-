@@ -127,39 +127,68 @@ class TextParser {
         if let detector = try? NSDataDetector(types: types.rawValue) {
             let matches = detector.matches(in: cleanOriginalText, options: [], range: NSRange(location: 0, length: cleanOriginalText.utf16.count))
             
-            for match in matches.reversed() {
+            var finalComponents = DateComponents()
+            var hasExplicitDate = false
+            var hasExplicitTime = false
+            let todayComponents = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+            
+            // First pass: Extract date components (forward to prioritize earlier and merge) and find first link
+            for match in matches {
                 if match.resultType == .date {
-                    if extractedDate == nil {
-                        extractedDate = match.date
-                        
+                    if extractedDate == nil, let date = match.date {
                         if let range = Range(match.range, in: cleanOriginalText) {
                             let matchedText = String(cleanOriginalText[range]).lowercased()
+                            let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
                             
-                            if let date = extractedDate {
-                                var components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-                                
-                                // NSDataDetector defaults to 12:00 PM (noon) if no time is provided.
-                                if components.hour == 12 && components.minute == 0 && components.second == 0 {
-                                    // Ensure the user didn't actually type "12" as a time
-                                    let timeIndicatorRegex = "(?i)(\\b12\\s*(pm|p\\.m\\.|am|a\\.m\\.)\\b|\\b12:00\\b|\\bnoon\\b|\\bat\\s+12\\b)"
-                                    let explicitlyMentioned12 = matchedText.range(of: timeIndicatorRegex, options: .regularExpression) != nil
-                                    
-                                    if !explicitlyMentioned12 {
-                                        components.hour = 7
-                                        extractedDate = Calendar.current.date(from: components)
-                                    }
+                            let isToday = comps.year == todayComponents.year && comps.month == todayComponents.month && comps.day == todayComponents.day
+                            let isNoon = comps.hour == 12 && comps.minute == 0 && comps.second == 0
+                            
+                            let explicitlyMentioned12 = matchedText.range(of: "(?i)(\\b12\\s*(pm|p\\.m\\.|am|a\\.m\\.)\\b|\\b12:00\\b|\\bnoon\\b|\\bat\\s+12\\b)", options: .regularExpression) != nil
+                            let explicitlyMentionedToday = matchedText.range(of: "(?i)\\btoday\\b", options: .regularExpression) != nil
+                            
+                            if !hasExplicitDate {
+                                if !isToday || explicitlyMentionedToday {
+                                    finalComponents.year = comps.year
+                                    finalComponents.month = comps.month
+                                    finalComponents.day = comps.day
+                                    hasExplicitDate = true
+                                } else if finalComponents.year == nil {
+                                    finalComponents.year = comps.year
+                                    finalComponents.month = comps.month
+                                    finalComponents.day = comps.day
+                                }
+                            }
+                            
+                            if !hasExplicitTime {
+                                if !isNoon || explicitlyMentioned12 {
+                                    finalComponents.hour = comps.hour
+                                    finalComponents.minute = comps.minute
+                                    finalComponents.second = comps.second
+                                    hasExplicitTime = true
+                                } else if finalComponents.hour == nil {
+                                    finalComponents.hour = 7
+                                    finalComponents.minute = 0
+                                    finalComponents.second = 0
                                 }
                             }
                         }
                     }
-                    
-                    // Always remove date from title
-                    if let range = Range(match.range, in: cleanOriginalText) {
-                        cleanOriginalText.removeSubrange(range)
-                    }
                 } else if match.resultType == .link {
                     if extractedURL == nil {
                         extractedURL = match.url
+                    }
+                }
+            }
+            
+            if extractedDate == nil && finalComponents.year != nil {
+                extractedDate = Calendar.current.date(from: finalComponents)
+            }
+            
+            // Second pass: Remove parsed dates from the string (must iterate backwards to preserve ranges)
+            for match in matches.reversed() {
+                if match.resultType == .date {
+                    if let range = Range(match.range, in: cleanOriginalText) {
+                        cleanOriginalText.removeSubrange(range)
                     }
                 }
             }

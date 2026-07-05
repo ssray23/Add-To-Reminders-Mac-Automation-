@@ -6,6 +6,7 @@ Built entirely in Swift natively, it replaces cloud-based AI parsing with Apple'
 
 ## Features
 - **Relative & Absolute Date Parsing:** Supports relative times like "in 3 hours", "30 mins from now", "in 2 weeks", "in 6 months from now", or "in 1 year" via custom regex, and falls back to Apple's incredibly fast `NSDataDetector` for absolute dates.
+- **Multi-line Date & Time Merging:** Intelligently combines separate date and time components (e.g., a date on one line and a time on the next) into a single cohesive reminder time, avoiding partial extraction issues.
 - **Recurrence Rules:** Natural language parsing for repeating events! Just type "repeat daily", "weekly", "every month", or "yearly" and the reminder will automatically be configured to recur.
 - **Smart Fallbacks:** Handles common typos (e.g., "tommorow", "minuts"), spelled-out ordinals (e.g. "Fourth of July" -> "4th of July"), and gracefully defaults to 7:00 AM for dates without specific times. It also includes specific workarounds for Apple's `NSDataDetector` quirks, such as preventing the word "due" from incorrectly snapping reminder dates to "today".
 - **Clean Titles:** Automatically strips out empty parentheses, dangling prepositions (e.g. "Expires"), and trailing punctuation left behind after date extraction to ensure pristine reminder titles.
