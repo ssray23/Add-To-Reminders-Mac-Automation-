@@ -115,6 +115,12 @@ class TextParser {
             cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\\b\(word)\\b", with: number, options: [.regularExpression, .caseInsensitive])
         }
         
+        // Hide "due" with a zero-width space to prevent NSDataDetector from incorrectly interpreting it as "today"
+        if let dueRegex = try? NSRegularExpression(pattern: "\\b(d)(ue)\\b", options: [.caseInsensitive]) {
+            let range = NSRange(location: 0, length: cleanOriginalText.utf16.count)
+            cleanOriginalText = dueRegex.stringByReplacingMatches(in: cleanOriginalText, options: [], range: range, withTemplate: "$1\u{200B}$2")
+        }
+        
         extractedDate = extractRelativeDate(text: &cleanOriginalText)
         
         let types: NSTextCheckingResult.CheckingType = [.date, .link]
@@ -161,6 +167,8 @@ class TextParser {
         
         // Remove trailing prepositions like "at", "on", "for", "in" which might have been left behind before the date
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\s+(at|on|for|in|by)\\s*$", with: "", options: .regularExpression)
+        
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\u{200B}", with: "")
         
         // Sanitize the original text to be the title
         let components = cleanOriginalText.components(separatedBy: .whitespacesAndNewlines)
