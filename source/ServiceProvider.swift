@@ -1,9 +1,18 @@
 import Cocoa
 
 @objc class ServiceProvider: NSObject {
+    private var isShowingAlert = false
+
     @objc func showQuickEntry() {
+        if isShowingAlert { return }
+        isShowingAlert = true
         DispatchQueue.main.async {
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.setActivationPolicy(.regular)
+            if #available(macOS 14.0, *) {
+                NSApp.activate()
+            } else {
+                NSApp.activate(ignoringOtherApps: true)
+            }
             
             let alert = NSAlert()
             alert.messageText = "New Reminder"
@@ -20,11 +29,20 @@ import Cocoa
             input.placeholderString = "e.g. Call John tomorrow at 7am"
             
             alert.accessoryView = input
+            alert.layout()
+            alert.window.makeKeyAndOrderFront(nil)
+            alert.window.makeFirstResponder(input)
             
-            // Focus the text field
-            alert.window.initialFirstResponder = input
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                if let textView = input.currentEditor() as? NSTextView {
+                    textView.insertionPointColor = NSColor.textColor
+                    textView.updateInsertionPointStateAndRestartTimer(true)
+                }
+            }
             
             let response = alert.runModal()
+            
+            self.isShowingAlert = false
             
             if response == .alertFirstButtonReturn {
                 let text = input.stringValue
@@ -38,6 +56,7 @@ import Cocoa
             } else {
                 NSApp.hide(nil)
             }
+            NSApp.setActivationPolicy(.accessory)
         }
     }
     
@@ -58,8 +77,15 @@ import Cocoa
     }
     
     private func promptForDate(parsedData: ParsedReminderData) {
+        if isShowingAlert { return }
+        isShowingAlert = true
         DispatchQueue.main.async {
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.setActivationPolicy(.regular)
+            if #available(macOS 14.0, *) {
+                NSApp.activate()
+            } else {
+                NSApp.activate(ignoringOtherApps: true)
+            }
             
             let alert = NSAlert()
             alert.messageText = "When to remind you?"
@@ -76,9 +102,19 @@ import Cocoa
             input.stringValue = "Tomorrow at 7am"
             
             alert.accessoryView = input
-            alert.window.initialFirstResponder = input
+            alert.layout()
+            alert.window.makeKeyAndOrderFront(nil)
+            alert.window.makeFirstResponder(input)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                if let textView = input.currentEditor() as? NSTextView {
+                    textView.insertionPointColor = NSColor.textColor
+                    textView.updateInsertionPointStateAndRestartTimer(true)
+                }
+            }
             
             let response = alert.runModal()
+            self.isShowingAlert = false
             
             if response == .alertFirstButtonReturn {
                 // Set Date
@@ -93,6 +129,7 @@ import Cocoa
             } else {
                 // Cancel - do nothing and let the service stay running
             }
+            NSApp.setActivationPolicy(.accessory)
         }
     }
     

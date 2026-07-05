@@ -16,6 +16,10 @@ Built entirely in Swift natively, it replaces cloud-based AI parsing with Apple'
 - **Native Notifications:** Triggers a standard macOS Notification Center alert (featuring the official Apple Reminders icon) displaying the parsed due date and time in a beautiful, human-readable format (e.g., `12th July 2026, 9:00 am` or `Tomorrow, 7:00 am`).
 - **URL Extraction:** Automatically extracts the first URL found in your selected text and adds it to the reminder's metadata.
 - **Persistent Background Agent:** Runs completely in the background as an `LSUIElement` app. It stays alive after the first launch to ensure subsequent reminders are instantaneous, to listen for global hotkeys, and to seamlessly manage macOS TCC (Permissions) without constant re-prompting.
+## Known Issues
+- **Missing Blinking Cursor in Quick Entry:** When the `NSAlert` modal pops up (via the `Cmd + R` global hotkey or the "No Date" fallback prompt), the text field receives focus automatically, but the blinking cursor (the insertion point) may remain invisible until you press a key. 
+  - *Why this happens:* The app runs as an `LSUIElement` (background agent). macOS's `NSAlert.runModal()` forcefully hijacks the main thread's event loop. Because the standard macOS idle run-loop is suspended during a modal loop, the field editor's internal timer—which handles the blinking cursor animation—refuses to start until the text view registers its first physical keystroke or mouse event. We temporarily elevate the app's activation policy to `.regular` to forcefully acquire the blue focus ring, but the animation loop remains blocked.
+  - *How it can be fixed eventually:* To entirely bypass this limitation, the Quick Entry UI must be completely rewritten. Instead of relying on the convenient `NSAlert` dialog box, a custom `NSWindow` (acting as an `NSPanel`) with a custom `NSTextField` needs to be built from scratch to handle the prompts without calling `.runModal()`.
 
 ## Architecture & How the Code Works
 The project operates as a headless macOS Background Service that listens for Pasteboard events. 

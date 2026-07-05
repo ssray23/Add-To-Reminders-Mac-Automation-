@@ -32,31 +32,39 @@ class TextParser {
     }
 
     static func extractRelativeDate(text: inout String) -> Date? {
-        let pattern = "(?i)\\b(?:in\\s+)?(\\d+)\\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|wks|week|weeks|mo|mos|month|months|y|yr|yrs|year|years)\\b(?:\\s+from\\s+now)?"
+        let pattern = "(?i)\\b(?:in\\s+)?(\\d+(?:[.,]\\d+)?)\\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|wks|week|weeks|mo|mos|month|months|y|yr|yrs|year|years)\\b(?:\\s+from\\s+now)?"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         
         let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
         if let match = regex.firstMatch(in: text, options: [], range: nsRange) {
             if let valueRange = Range(match.range(at: 1), in: text),
-               let unitRange = Range(match.range(at: 2), in: text),
-               let value = Int(text[valueRange]) {
+               let unitRange = Range(match.range(at: 2), in: text) {
+                
+                let valueString = String(text[valueRange]).replacingOccurrences(of: ",", with: ".")
+                guard let value = Double(valueString) else { return nil }
                 
                 let unitString = String(text[unitRange]).lowercased()
                 var component = DateComponents()
                 
                 switch unitString {
                 case "m", "min", "mins", "minute", "minutes":
-                    component.minute = value
+                    component.minute = Int(value)
+                    component.second = Int(value.truncatingRemainder(dividingBy: 1) * 60)
                 case "h", "hr", "hrs", "hour", "hours":
-                    component.hour = value
+                    component.hour = Int(value)
+                    component.minute = Int(value.truncatingRemainder(dividingBy: 1) * 60)
                 case "d", "day", "days":
-                    component.day = value
+                    component.day = Int(value)
+                    component.hour = Int(value.truncatingRemainder(dividingBy: 1) * 24)
                 case "w", "wk", "wks", "week", "weeks":
-                    component.day = value * 7
+                    component.day = Int(value) * 7
+                    component.hour = Int(value.truncatingRemainder(dividingBy: 1) * 24 * 7)
                 case "mo", "mos", "month", "months":
-                    component.month = value
+                    component.month = Int(value)
+                    component.day = Int(value.truncatingRemainder(dividingBy: 1) * 30)
                 case "y", "yr", "yrs", "year", "years":
-                    component.year = value
+                    component.year = Int(value)
+                    component.month = Int(value.truncatingRemainder(dividingBy: 1) * 12)
                 default:
                     break
                 }
