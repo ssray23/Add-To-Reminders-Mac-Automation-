@@ -166,7 +166,17 @@ class TextParser {
         }
         
         // Remove trailing prepositions like "at", "on", "for", "in" which might have been left behind before the date
-        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\s+(at|on|for|in|by)\\s*$", with: "", options: .regularExpression)
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\s+(expires|due|at|on|for|in|by|until)\\s*$", with: "", options: .regularExpression)
+        
+        // Clean up leftover words in parentheses if they are just prepositions/keywords now
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\(\\s*(expires|due|on|at|by|until|for|in)\\s*\\)", with: "()", options: .regularExpression)
+        
+        // Remove empty parentheses/brackets that might have been left after removing the date
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\\(\\s*\\)", with: "", options: .regularExpression)
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\\[\\s*\\]", with: "", options: .regularExpression)
+        
+        // Remove trailing punctuation like colons, dashes, commas
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "[:\\-,\\s]+$", with: "", options: .regularExpression)
         
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\u{200B}", with: "")
         
