@@ -5,6 +5,10 @@ APP_NAME="AddToReminders"
 APP_DIR="$APP_NAME.app"
 MACOS_DIR="$APP_DIR/Contents/MacOS"
 
+# Force quit any existing instances so the new build can run immediately
+echo "Stopping existing app instances..."
+killall "$APP_NAME" 2>/dev/null || true
+
 # Create directories
 mkdir -p "$MACOS_DIR"
 mkdir -p "$APP_DIR/Contents/Resources"
