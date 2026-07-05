@@ -37,7 +37,7 @@ The project operates as a headless macOS Background Service that listens for Pas
    ```bash
    ./build.sh
    ```
-   *This compiles the Swift code, builds `AddToReminders.app`, and registers it with macOS.*
+   *This automatically force-quits any old background instances, compiles the Swift code, builds `AddToReminders.app`, and registers it with macOS.*
 4. Go to **System Settings > Keyboard > Keyboard Shortcuts > Services**.
 5. Under "Text", ensure **Add to Reminders** is checked.
 6. To use it, simply highlight text in any app (Safari, Notes, Mail, etc.), right-click, select **Services**, and click **Add to Reminders**. 
