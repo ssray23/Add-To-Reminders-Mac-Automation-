@@ -18,54 +18,96 @@ class TextParser {
     }
 
     static func extractRecurrence(text: inout String) -> EKRecurrenceRule? {
-        let patterns: [(regex: String, frequency: EKRecurrenceFrequency)] = [
-            ("(?i)\\b(every\\s*day|daily|repeat\\s*daily)\\b", .daily),
-            ("(?i)\\b(every\\s*week|weekly|repeat\\s*weekly)\\b", .weekly),
-            ("(?i)\\b(every\\s*month|monthly|repeat\\s*monthly)\\b", .monthly),
-            ("(?i)\\b(every\\s*year|yearly|repeat\\s*yearly)\\b", .yearly),
-            ("(?i)\\b(repeat)\\b(?=\\s+(?:for|until|ending|ends))", .daily)
-        ]
+        var matchedFrequency: EKRecurrenceFrequency?
+        var matchedInterval: Int = 1
+        var matchRangeToRemove: Range<String.Index>?
         
-        for item in patterns {
-            if let regex = try? NSRegularExpression(pattern: item.regex, options: []) {
-                let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
-                if let match = regex.firstMatch(in: text, options: [], range: nsRange) {
-                    if let range = Range(match.range, in: text) {
-                        text.removeSubrange(range)
-                    }
+        let dynamicPattern = "(?i)\\b(?:repeat\\s+)?every\\s+(\\d+)\\s+(day|week|month|year)s?\\b"
+        if let regex = try? NSRegularExpression(pattern: dynamicPattern, options: []) {
+            let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+            if let match = regex.firstMatch(in: text, options: [], range: nsRange) {
+                if let range = Range(match.range, in: text),
+                   let numRange = Range(match.range(at: 1), in: text),
+                   let unitRange = Range(match.range(at: 2), in: text) {
                     
-                    var recurrenceEnd: EKRecurrenceEnd? = nil
-                    let untilRegex = try? NSRegularExpression(pattern: "(?i)\\b(until|ending\\s+on|ends\\s+on|for\\s*(?:the\\s*)?next|for)\\b", options: [])
-                    if let untilRegex = untilRegex,
-                       let untilMatch = untilRegex.firstMatch(in: text, options: [], range: NSRange(text.startIndex..<text.endIndex, in: text)) {
-                        
-                        let substringRange = NSRange(location: untilMatch.range.upperBound, length: text.utf16.count - untilMatch.range.upperBound)
-                        
-                        if let relativeData = extractRelativeDate(text: text, searchRange: substringRange) {
-                            recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: relativeData.0))
-                            
-                            let removeNSRange = NSRange(location: untilMatch.range.lowerBound, length: relativeData.1.upperBound - untilMatch.range.lowerBound)
-                            if let removeRange = Range(removeNSRange, in: text) {
-                                text.removeSubrange(removeRange)
-                            }
-                        } else if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue),
-                           let dateMatch = detector.firstMatch(in: text, options: [], range: substringRange),
-                           let parsedDate = dateMatch.date {
-                            
-                            recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: parsedDate))
-                            
-                            let removeNSRange = NSRange(location: untilMatch.range.lowerBound, length: dateMatch.range.upperBound - untilMatch.range.lowerBound)
-                            if let removeRange = Range(removeNSRange, in: text) {
-                                text.removeSubrange(removeRange)
-                            }
-                        }
-                    }
+                    let num = Int(String(text[numRange])) ?? 1
+                    let unit = String(text[unitRange]).lowercased()
                     
-                    return EKRecurrenceRule(recurrenceWith: item.frequency, interval: 1, end: recurrenceEnd)
+                    matchRangeToRemove = range
+                    matchedInterval = num
+                    switch unit {
+                    case "day": matchedFrequency = .daily
+                    case "week": matchedFrequency = .weekly
+                    case "month": matchedFrequency = .monthly
+                    case "year": matchedFrequency = .yearly
+                    default: matchedFrequency = .daily
+                    }
                 }
             }
         }
-        return nil
+        
+        if matchedFrequency == nil {
+            let patterns: [(regex: String, frequency: EKRecurrenceFrequency, interval: Int)] = [
+                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*day\\b", .daily, 2),
+                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*week\\b", .weekly, 2),
+                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*month\\b", .monthly, 2),
+                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*year\\b", .yearly, 2),
+                ("(?i)\\b(?:repeat\\s+)?(every\\s*day|daily)\\b", .daily, 1),
+                ("(?i)\\b(?:repeat\\s+)?(every\\s*week|weekly)\\b", .weekly, 1),
+                ("(?i)\\b(?:repeat\\s+)?(every\\s*month|monthly)\\b", .monthly, 1),
+                ("(?i)\\b(?:repeat\\s+)?(every\\s*year|yearly)\\b", .yearly, 1),
+                ("(?i)\\b(repeat)\\b(?=\\s+(?:for|until|ending|ends))", .daily, 1)
+            ]
+            
+            for item in patterns {
+                if let regex = try? NSRegularExpression(pattern: item.regex, options: []) {
+                    let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+                    if let match = regex.firstMatch(in: text, options: [], range: nsRange) {
+                        if let range = Range(match.range, in: text) {
+                            matchRangeToRemove = range
+                            matchedFrequency = item.frequency
+                            matchedInterval = item.interval
+                            break
+                        }
+                    }
+                }
+            }
+        }
+        
+        guard let freq = matchedFrequency, let removeRange = matchRangeToRemove else {
+            return nil
+        }
+        
+        text.removeSubrange(removeRange)
+        
+        var recurrenceEnd: EKRecurrenceEnd? = nil
+        let untilRegex = try? NSRegularExpression(pattern: "(?i)\\b(until|ending\\s+on|ends\\s+on|for\\s*(?:the\\s*)?next|for)\\b", options: [])
+        if let untilRegex = untilRegex,
+           let untilMatch = untilRegex.firstMatch(in: text, options: [], range: NSRange(text.startIndex..<text.endIndex, in: text)) {
+            
+            let substringRange = NSRange(location: untilMatch.range.upperBound, length: text.utf16.count - untilMatch.range.upperBound)
+            
+            if let relativeData = extractRelativeDate(text: text, searchRange: substringRange) {
+                recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: relativeData.0))
+                
+                let removeNSRange = NSRange(location: untilMatch.range.lowerBound, length: relativeData.1.upperBound - untilMatch.range.lowerBound)
+                if let removeRange = Range(removeNSRange, in: text) {
+                    text.removeSubrange(removeRange)
+                }
+            } else if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue),
+               let dateMatch = detector.firstMatch(in: text, options: [], range: substringRange),
+               let parsedDate = dateMatch.date {
+                
+                recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: parsedDate))
+                
+                let removeNSRange = NSRange(location: untilMatch.range.lowerBound, length: dateMatch.range.upperBound - untilMatch.range.lowerBound)
+                if let removeRange = Range(removeNSRange, in: text) {
+                    text.removeSubrange(removeRange)
+                }
+            }
+        }
+        
+        return EKRecurrenceRule(recurrenceWith: freq, interval: matchedInterval, end: recurrenceEnd)
     }
 
     static func extractRelativeDate(text: String, searchRange: NSRange? = nil) -> (Date, NSRange)? {
