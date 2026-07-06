@@ -33,7 +33,15 @@ class RemindersManager {
         reminder.calendar = eventStore.defaultCalendarForNewReminders()
         
         if let url = data.url {
-            reminder.url = url
+            reminder.url = url // Still set it just in case Apple fixes the UI bug
+            
+            // Due to a known macOS EventKit bug, the UI often ignores reminder.url. 
+            // We must place it in the Notes field to ensure it is visible and clickable.
+            if let existingNotes = reminder.notes, !existingNotes.isEmpty {
+                reminder.notes = existingNotes + "\n\n" + url.absoluteString
+            } else {
+                reminder.notes = url.absoluteString
+            }
         }
         
         if let date = data.date {
