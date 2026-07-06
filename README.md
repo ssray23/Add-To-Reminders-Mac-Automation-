@@ -14,7 +14,7 @@ Built entirely in Swift natively, it replaces cloud-based AI parsing with Apple'
 - **Interactive Prompts:** If no date is found in highlighted text, a native translucent window smoothly prompts you asking "When to remind you?" with a smart default (Tomorrow at 7am) and options for "No Date", "Set Date", or "Cancel".
 - **Instant Visual Feedback:** Displays a sleek, non-blocking SwiftUI HUD animation the moment you trigger the action.
 - **Native Notifications:** Triggers a standard macOS Notification Center alert (featuring the official Apple Reminders icon) displaying the parsed due date and time in a beautiful, human-readable format (e.g., `12th July 2026, 9:00 am` or `Tomorrow, 7:00 am`).
-- **URL Extraction:** Automatically extracts the first URL found in your selected text and adds it to the reminder's metadata.
+- **URL Extraction & Input:** Automatically extracts the first URL found in your selected text. You can also manually paste URLs into a dedicated URL field in the Quick Entry window. Due to a known macOS EventKit bug where the UI ignores third-party API URLs, the app intelligently falls back to injecting the URL directly into the Reminder's Notes field so it remains instantly clickable.
 - **Persistent Background Agent:** Runs completely in the background as an `LSUIElement` app. It stays alive after the first launch to ensure subsequent reminders are instantaneous, to listen for global hotkeys, and to seamlessly manage macOS TCC (Permissions) without constant re-prompting.
 
 ## Architecture & How the Code Works
