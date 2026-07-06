@@ -45,10 +45,12 @@ The project operates as a headless macOS Background Service that listens for Pas
 6. To use it, simply highlight text in any app (Safari, Notes, Mail, etc.), right-click, select **Services**, and click **Add to Reminders**. 
    - *Note: On the first run, macOS will ask for permission to access your Reminders. Because the app stays running in the background, it will remember this permission permanently.*
 
-## How to Port to Another Mac
-To install this on another Mac, you do not need to install Xcode. You only need the standard command line tools.
-1. Copy this entire project folder to the new Mac.
-2. Open Terminal on the new Mac and navigate to the folder.
-3. Run `./build.sh`.
-4. macOS will automatically register the newly compiled `AddToReminders.app` as a Service tailored to that machine's architecture. 
-5. Enable it in **System Settings > Keyboard > Keyboard Shortcuts > Services** as described above.
+## How to Install on Another Mac
+Because this app is self-contained, you do not need Xcode or the terminal to install it on another Mac.
+
+1. Download or copy the pre-packaged **`AddToReminders_Install.zip`** to the new Mac.
+2. Unzip it and drag the **`AddToReminders.app`** into your **Applications** folder.
+3. **Right-Click** the app and select **"Open"**. 
+   - *Note: You must Right-Click -> Open the very first time to bypass macOS Gatekeeper, as this app is not signed with a paid Apple Developer certificate.*
+4. The app will launch silently in the background. macOS will scan it and automatically register the global service.
+5. Enable the shortcut by going to **System Settings > Keyboard > Keyboard Shortcuts > Services** and ensuring **Add to Reminders** is checked.
