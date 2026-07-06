@@ -123,6 +123,10 @@ class TextParser {
         let typoFixes = [
             "tommorow": "tomorrow",
             "tomorow": "tomorrow",
+            "tommorrow": "tomorrow",
+            "tommroow": "tomorrow",
+            "tomrrow": "tomorrow",
+            "tomoro": "tomorrow",
             "tmrw": "tomorrow",
             "tmw": "tomorrow",
             "tonite": "tonight",
@@ -134,7 +138,10 @@ class TextParser {
             "huors": "hours",
             "hores": "hours",
             "houra": "hours",
-            "hra": "hrs"
+            "hra": "hrs",
+            "evry": "every",
+            "wek": "week",
+            "mounth": "month"
         ]
         
         let ordinalFixes = [
