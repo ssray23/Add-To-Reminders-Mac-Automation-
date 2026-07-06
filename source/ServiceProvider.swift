@@ -7,56 +7,19 @@ import Cocoa
         if isShowingAlert { return }
         isShowingAlert = true
         DispatchQueue.main.async {
-            NSApp.setActivationPolicy(.regular)
-            if #available(macOS 14.0, *) {
-                NSApp.activate()
-            } else {
-                NSApp.activate(ignoringOtherApps: true)
-            }
-            
-            let alert = NSAlert()
-            alert.messageText = "New Reminder"
-            alert.informativeText = "What do you want to be reminded about?"
-            alert.icon = NSWorkspace.shared.icon(forFile: "/System/Applications/Reminders.app")
-            
-            alert.addButton(withTitle: "Add")
-            let cancelButton = alert.addButton(withTitle: "Cancel")
-            if #available(macOS 11.0, *) {
-                cancelButton.hasDestructiveAction = true
-            }
-            
-            let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 330, height: 24))
-            input.placeholderString = "e.g. Call John tomorrow at 7am"
-            
-            alert.accessoryView = input
-            alert.layout()
-            alert.window.makeKeyAndOrderFront(nil)
-            alert.window.makeFirstResponder(input)
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                if let textView = input.currentEditor() as? NSTextView {
-                    textView.insertionPointColor = NSColor.textColor
-                    textView.updateInsertionPointStateAndRestartTimer(true)
-                }
-            }
-            
-            let response = alert.runModal()
-            
-            self.isShowingAlert = false
-            
-            if response == .alertFirstButtonReturn {
-                let text = input.stringValue
-                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            QuickEntryWindowController.shared.show(prompt: "What do you want to be reminded about?",
+                                                   placeholder: "e.g. Call John tomorrow at 7am") { [weak self] result in
+                guard let self = self else { return }
+                self.isShowingAlert = false
+                
+                guard let text = result, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     NSApp.hide(nil)
                     return
                 }
                 
                 let parsedData = TextParser.parse(text: text)
                 self.proceedWithSaving(parsedData: parsedData)
-            } else {
-                NSApp.hide(nil)
             }
-            NSApp.setActivationPolicy(.accessory)
         }
     }
     
@@ -80,56 +43,27 @@ import Cocoa
         if isShowingAlert { return }
         isShowingAlert = true
         DispatchQueue.main.async {
-            NSApp.setActivationPolicy(.regular)
-            if #available(macOS 14.0, *) {
-                NSApp.activate()
-            } else {
-                NSApp.activate(ignoringOtherApps: true)
-            }
-            
-            let alert = NSAlert()
-            alert.messageText = "When to remind you?"
-            alert.informativeText = "Type naturally (e.g. 'tomorrow at 5pm', 'July 12th repeat daily')."
-            alert.icon = NSWorkspace.shared.icon(forFile: "/System/Applications/Reminders.app")
-            
-            // Buttons are arranged right-to-left in macOS
-            alert.addButton(withTitle: "Set Date")
-            alert.addButton(withTitle: "No Date")
-            alert.addButton(withTitle: "Cancel")
-            
-            let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
-            input.placeholderString = "e.g. tomorrow at 7am repeat weekly"
-            input.stringValue = "Tomorrow at 7am"
-            
-            alert.accessoryView = input
-            alert.layout()
-            alert.window.makeKeyAndOrderFront(nil)
-            alert.window.makeFirstResponder(input)
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                if let textView = input.currentEditor() as? NSTextView {
-                    textView.insertionPointColor = NSColor.textColor
-                    textView.updateInsertionPointStateAndRestartTimer(true)
+            QuickEntryWindowController.shared.show(prompt: "When to remind you? (Clear text for 'No Date')",
+                                                   placeholder: "e.g. tomorrow at 7am repeat weekly",
+                                                   initialText: "Tomorrow at 7am") { [weak self] result in
+                guard let self = self else { return }
+                self.isShowingAlert = false
+                
+                guard let text = result else {
+                    // Cancel
+                    return
+                }
+                
+                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // No Date
+                    self.proceedWithSaving(parsedData: parsedData)
+                } else {
+                    // Set Date
+                    let manualParsed = TextParser.parse(text: text)
+                    let finalData = ParsedReminderData(title: parsedData.title, date: manualParsed.date, url: parsedData.url, recurrence: parsedData.recurrence ?? manualParsed.recurrence)
+                    self.proceedWithSaving(parsedData: finalData)
                 }
             }
-            
-            let response = alert.runModal()
-            self.isShowingAlert = false
-            
-            if response == .alertFirstButtonReturn {
-                // Set Date
-                let manualInput = input.stringValue
-                let manualParsed = TextParser.parse(text: manualInput)
-                
-                let finalData = ParsedReminderData(title: parsedData.title, date: manualParsed.date, url: parsedData.url, recurrence: parsedData.recurrence ?? manualParsed.recurrence)
-                self.proceedWithSaving(parsedData: finalData)
-            } else if response == .alertSecondButtonReturn {
-                // No Date
-                self.proceedWithSaving(parsedData: parsedData)
-            } else {
-                // Cancel - do nothing and let the service stay running
-            }
-            NSApp.setActivationPolicy(.accessory)
         }
     }
     

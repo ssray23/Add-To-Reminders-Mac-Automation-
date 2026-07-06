@@ -24,7 +24,27 @@ class TextParser {
                     if let range = Range(match.range, in: text) {
                         text.removeSubrange(range)
                     }
-                    return EKRecurrenceRule(recurrenceWith: item.frequency, interval: 1, end: nil)
+                    
+                    var recurrenceEnd: EKRecurrenceEnd? = nil
+                    let untilRegex = try? NSRegularExpression(pattern: "(?i)\\b(until|ending\\s+on|ends\\s+on)\\b", options: [])
+                    if let untilRegex = untilRegex,
+                       let untilMatch = untilRegex.firstMatch(in: text, options: [], range: NSRange(text.startIndex..<text.endIndex, in: text)) {
+                        
+                        let substringRange = NSRange(location: untilMatch.range.upperBound, length: text.utf16.count - untilMatch.range.upperBound)
+                        if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue),
+                           let dateMatch = detector.firstMatch(in: text, options: [], range: substringRange),
+                           let parsedDate = dateMatch.date {
+                            
+                            recurrenceEnd = EKRecurrenceEnd(end: parsedDate)
+                            
+                            let removeNSRange = NSRange(location: untilMatch.range.lowerBound, length: dateMatch.range.upperBound - untilMatch.range.lowerBound)
+                            if let removeRange = Range(removeNSRange, in: text) {
+                                text.removeSubrange(removeRange)
+                            }
+                        }
+                    }
+                    
+                    return EKRecurrenceRule(recurrenceWith: item.frequency, interval: 1, end: recurrenceEnd)
                 }
             }
         }
@@ -84,7 +104,6 @@ class TextParser {
         var extractedURL: URL? = nil
         
         var cleanOriginalText = text
-        let recurrenceRule = extractRecurrence(text: &cleanOriginalText)
         
         // Pre-process specifically for the date detector to handle common typos
         let typoFixes = [
@@ -123,10 +142,17 @@ class TextParser {
             cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\\b\(word)\\b", with: number, options: [.regularExpression, .caseInsensitive])
         }
         
-        // Hide "due" with a zero-width space to prevent NSDataDetector from incorrectly interpreting it as "today"
-        if let dueRegex = try? NSRegularExpression(pattern: "\\b(d)(ue)\\b", options: [.caseInsensitive]) {
-            let range = NSRange(location: 0, length: cleanOriginalText.utf16.count)
-            cleanOriginalText = dueRegex.stringByReplacingMatches(in: cleanOriginalText, options: [], range: range, withTemplate: "$1\u{200B}$2")
+        let recurrenceRule = extractRecurrence(text: &cleanOriginalText)
+        
+        // Hide tricky words with a zero-width space to prevent NSDataDetector from incorrectly interpreting them as durations starting today
+        let trickyWords = ["due", "before", "by", "until"]
+        for word in trickyWords {
+            let prefix = String(word.prefix(1))
+            let suffix = String(word.dropFirst())
+            if let regex = try? NSRegularExpression(pattern: "\\b(\(prefix))(\(suffix))\\b", options: [.caseInsensitive]) {
+                let range = NSRange(location: 0, length: cleanOriginalText.utf16.count)
+                cleanOriginalText = regex.stringByReplacingMatches(in: cleanOriginalText, options: [], range: range, withTemplate: "$1\u{200B}$2")
+            }
         }
         
         extractedDate = extractRelativeDate(text: &cleanOriginalText)
@@ -202,11 +228,13 @@ class TextParser {
             }
         }
         
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\u{200B}", with: "")
+        
         // Remove trailing prepositions like "at", "on", "for", "in" which might have been left behind before the date
-        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\s+(expires|due|at|on|for|in|by|until)\\s*$", with: "", options: .regularExpression)
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\s+(expires|due|before|at|on|for|in|by|until)\\s*$", with: "", options: .regularExpression)
         
         // Clean up leftover words in parentheses if they are just prepositions/keywords now
-        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\(\\s*(expires|due|on|at|by|until|for|in)\\s*\\)", with: "()", options: .regularExpression)
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\(\\s*(expires|due|before|on|at|by|until|for|in)\\s*\\)", with: "()", options: .regularExpression)
         
         // Remove empty parentheses/brackets that might have been left after removing the date
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\\(\\s*\\)", with: "", options: .regularExpression)
@@ -214,8 +242,6 @@ class TextParser {
         
         // Remove trailing punctuation like colons, dashes, commas
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "[:\\-,\\s]+$", with: "", options: .regularExpression)
-        
-        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\u{200B}", with: "")
         
         // Sanitize the original text to be the title
         let components = cleanOriginalText.components(separatedBy: .whitespacesAndNewlines)

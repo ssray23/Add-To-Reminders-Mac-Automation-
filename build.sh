@@ -15,7 +15,7 @@ mkdir -p "$APP_DIR/Contents/Resources"
 
 # Compile Swift files
 echo "Compiling Swift files..."
-swiftc source/*.swift -o "$MACOS_DIR/$APP_NAME" -target arm64-apple-macosx11.0
+swiftc source/*.swift -o "$MACOS_DIR/$APP_NAME" -target arm64-apple-macosx12.0
 
 # Copy Reminders icon
 echo "Copying App Icon..."
