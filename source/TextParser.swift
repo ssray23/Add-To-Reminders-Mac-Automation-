@@ -9,12 +9,21 @@ struct ParsedReminderData {
 }
 
 class TextParser {
+    static func endOfDay(for date: Date) -> Date {
+        var components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        components.hour = 23
+        components.minute = 59
+        components.second = 59
+        return Calendar.current.date(from: components) ?? date
+    }
+
     static func extractRecurrence(text: inout String) -> EKRecurrenceRule? {
         let patterns: [(regex: String, frequency: EKRecurrenceFrequency)] = [
             ("(?i)\\b(every\\s*day|daily|repeat\\s*daily)\\b", .daily),
             ("(?i)\\b(every\\s*week|weekly|repeat\\s*weekly)\\b", .weekly),
             ("(?i)\\b(every\\s*month|monthly|repeat\\s*monthly)\\b", .monthly),
-            ("(?i)\\b(every\\s*year|yearly|repeat\\s*yearly)\\b", .yearly)
+            ("(?i)\\b(every\\s*year|yearly|repeat\\s*yearly)\\b", .yearly),
+            ("(?i)\\b(repeat)\\b(?=\\s+(?:for|until|ending|ends))", .daily)
         ]
         
         for item in patterns {
@@ -26,16 +35,24 @@ class TextParser {
                     }
                     
                     var recurrenceEnd: EKRecurrenceEnd? = nil
-                    let untilRegex = try? NSRegularExpression(pattern: "(?i)\\b(until|ending\\s+on|ends\\s+on)\\b", options: [])
+                    let untilRegex = try? NSRegularExpression(pattern: "(?i)\\b(until|ending\\s+on|ends\\s+on|for\\s*(?:the\\s*)?next|for)\\b", options: [])
                     if let untilRegex = untilRegex,
                        let untilMatch = untilRegex.firstMatch(in: text, options: [], range: NSRange(text.startIndex..<text.endIndex, in: text)) {
                         
                         let substringRange = NSRange(location: untilMatch.range.upperBound, length: text.utf16.count - untilMatch.range.upperBound)
-                        if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue),
+                        
+                        if let relativeData = extractRelativeDate(text: text, searchRange: substringRange) {
+                            recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: relativeData.0))
+                            
+                            let removeNSRange = NSRange(location: untilMatch.range.lowerBound, length: relativeData.1.upperBound - untilMatch.range.lowerBound)
+                            if let removeRange = Range(removeNSRange, in: text) {
+                                text.removeSubrange(removeRange)
+                            }
+                        } else if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue),
                            let dateMatch = detector.firstMatch(in: text, options: [], range: substringRange),
                            let parsedDate = dateMatch.date {
                             
-                            recurrenceEnd = EKRecurrenceEnd(end: parsedDate)
+                            recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: parsedDate))
                             
                             let removeNSRange = NSRange(location: untilMatch.range.lowerBound, length: dateMatch.range.upperBound - untilMatch.range.lowerBound)
                             if let removeRange = Range(removeNSRange, in: text) {
@@ -51,11 +68,11 @@ class TextParser {
         return nil
     }
 
-    static func extractRelativeDate(text: inout String) -> Date? {
+    static func extractRelativeDate(text: String, searchRange: NSRange? = nil) -> (Date, NSRange)? {
         let pattern = "(?i)\\b(?:in\\s+)?(\\d+(?:[.,]\\d+)?)\\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|wks|week|weeks|mo|mos|month|months|y|yr|yrs|year|years)\\b(?:\\s+from\\s+now)?"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         
-        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        let nsRange = searchRange ?? NSRange(text.startIndex..<text.endIndex, in: text)
         if let match = regex.firstMatch(in: text, options: [], range: nsRange) {
             if let valueRange = Range(match.range(at: 1), in: text),
                let unitRange = Range(match.range(at: 2), in: text) {
@@ -89,11 +106,8 @@ class TextParser {
                     break
                 }
                 
-                if let range = Range(match.range, in: text) {
-                    text.removeSubrange(range)
-                }
-                
-                return Calendar.current.date(byAdding: component, to: Date())
+                let date = Calendar.current.date(byAdding: component, to: Date())!
+                return (date, match.range)
             }
         }
         return nil
@@ -155,7 +169,12 @@ class TextParser {
             }
         }
         
-        extractedDate = extractRelativeDate(text: &cleanOriginalText)
+        if let relativeData = extractRelativeDate(text: cleanOriginalText) {
+            extractedDate = relativeData.0
+            if let range = Range(relativeData.1, in: cleanOriginalText) {
+                cleanOriginalText.removeSubrange(range)
+            }
+        }
         
         let types: NSTextCheckingResult.CheckingType = [.date, .link]
         if let detector = try? NSDataDetector(types: types.rawValue) {
