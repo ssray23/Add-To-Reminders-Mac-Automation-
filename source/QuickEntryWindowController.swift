@@ -9,10 +9,10 @@ class QuickEntryPanel: NSPanel {
 class QuickEntryWindowController: NSWindowController, NSWindowDelegate {
     static let shared = QuickEntryWindowController()
     
-    private var completion: ((String?) -> Void)?
+    private var completion: (((text: String, url: String)?) -> Void)?
     
     init() {
-        let rect = NSRect(x: 0, y: 0, width: 600, height: 160)
+        let rect = NSRect(x: 0, y: 0, width: 600, height: 210)
         let window = QuickEntryPanel(contentRect: rect,
                              styleMask: [.borderless, .nonactivatingPanel],
                              backing: .buffered,
@@ -35,7 +35,7 @@ class QuickEntryWindowController: NSWindowController, NSWindowDelegate {
         fatalError("init(coder:) has not been implemented")
     }
     
-    func show(prompt: String, placeholder: String, initialText: String = "", completion: @escaping (String?) -> Void) {
+    func show(prompt: String, placeholder: String, initialText: String = "", completion: @escaping ((text: String, url: String)?) -> Void) {
         self.completion = completion
         
         NSApp.setActivationPolicy(.regular)
@@ -71,9 +71,14 @@ struct QuickEntryView: View {
     let prompt: String
     let placeholder: String
     @State var text: String
-    let onComplete: (String?) -> Void
+    @State var urlText: String = ""
+    let onComplete: (((text: String, url: String)?) -> Void)
     
-    @FocusState private var isFocused: Bool
+    enum Field {
+        case text
+        case url
+    }
+    @FocusState private var focusedField: Field?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -89,16 +94,31 @@ struct QuickEntryView: View {
                 .cornerRadius(8)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.accentColor.opacity(isFocused ? 1.0 : 0.0), lineWidth: 2)
+                        .stroke(Color.accentColor.opacity(focusedField == .text ? 1.0 : 0.0), lineWidth: 2)
                 )
-                .focused($isFocused)
+                .focused($focusedField, equals: .text)
                 .onSubmit {
-                    onComplete(text)
+                    onComplete((text: text, url: urlText))
                 }
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        isFocused = true
+                        focusedField = .text
                     }
+                }
+                
+            TextField("URL (Optional)", text: $urlText)
+                .textFieldStyle(PlainTextFieldStyle())
+                .font(.system(size: 14))
+                .padding(12)
+                .background(Color(NSColor.textBackgroundColor))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.accentColor.opacity(focusedField == .url ? 1.0 : 0.0), lineWidth: 2)
+                )
+                .focused($focusedField, equals: .url)
+                .onSubmit {
+                    onComplete((text: text, url: urlText))
                 }
             
             HStack {
@@ -118,7 +138,7 @@ struct QuickEntryView: View {
                 .keyboardShortcut(.escape, modifiers: [])
                 
                 Button(action: {
-                    onComplete(text)
+                    onComplete((text: text, url: urlText))
                 }) {
                     Text("Add")
                         .fontWeight(.medium)

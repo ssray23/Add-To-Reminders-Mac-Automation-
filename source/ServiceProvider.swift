@@ -12,12 +12,23 @@ import Cocoa
                 guard let self = self else { return }
                 self.isShowingAlert = false
                 
-                guard let text = result, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                guard let resultTuple = result, !resultTuple.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     NSApp.hide(nil)
                     return
                 }
                 
-                let parsedData = TextParser.parse(text: text)
+                var parsedData = TextParser.parse(text: resultTuple.text)
+                
+                if !resultTuple.url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    var finalUrlString = resultTuple.url.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !finalUrlString.lowercased().hasPrefix("http") {
+                        finalUrlString = "https://" + finalUrlString
+                    }
+                    if let newUrl = URL(string: finalUrlString) {
+                        parsedData = ParsedReminderData(title: parsedData.title, date: parsedData.date, url: newUrl, recurrence: parsedData.recurrence)
+                    }
+                }
+                
                 self.proceedWithSaving(parsedData: parsedData)
             }
         }
@@ -49,18 +60,32 @@ import Cocoa
                 guard let self = self else { return }
                 self.isShowingAlert = false
                 
-                guard let text = result else {
+                guard let resultTuple = result else {
                     // Cancel
                     return
                 }
                 
+                let text = resultTuple.text
+                var finalUrl = parsedData.url
+                
+                if !resultTuple.url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    var finalUrlString = resultTuple.url.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !finalUrlString.lowercased().hasPrefix("http") {
+                        finalUrlString = "https://" + finalUrlString
+                    }
+                    if let newUrl = URL(string: finalUrlString) {
+                        finalUrl = newUrl
+                    }
+                }
+                
                 if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     // No Date
-                    self.proceedWithSaving(parsedData: parsedData)
+                    let finalData = ParsedReminderData(title: parsedData.title, date: parsedData.date, url: finalUrl, recurrence: parsedData.recurrence)
+                    self.proceedWithSaving(parsedData: finalData)
                 } else {
                     // Set Date
                     let manualParsed = TextParser.parse(text: text)
-                    let finalData = ParsedReminderData(title: parsedData.title, date: manualParsed.date, url: parsedData.url, recurrence: parsedData.recurrence ?? manualParsed.recurrence)
+                    let finalData = ParsedReminderData(title: parsedData.title, date: manualParsed.date, url: finalUrl, recurrence: parsedData.recurrence ?? manualParsed.recurrence)
                     self.proceedWithSaving(parsedData: finalData)
                 }
             }
