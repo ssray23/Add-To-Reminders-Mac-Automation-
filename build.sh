@@ -35,3 +35,10 @@ echo "Updating dynamic services..."
 /System/Library/CoreServices/pbs -flush
 
 echo "Build complete. App is at $APP_DIR"
+
+# Package into a deployable zip
+echo "Packaging zip file..."
+rm -f AddToReminders_Install.zip
+zip -q -r AddToReminders_Install.zip "$APP_DIR"
+
+echo "Done! You can share AddToReminders_Install.zip"
