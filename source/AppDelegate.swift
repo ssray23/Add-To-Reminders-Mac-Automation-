@@ -1,5 +1,6 @@
 import Cocoa
 import Carbon
+import ServiceManagement
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     let serviceProvider = ServiceProvider()
@@ -8,6 +9,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         NSApp.servicesProvider = serviceProvider
         NSUpdateDynamicServices()
+        
+        if #available(macOS 13.0, *) {
+            do {
+                if SMAppService.mainApp.status == .notRegistered {
+                    try SMAppService.mainApp.register()
+                    print("Successfully registered for login")
+                }
+            } catch {
+                print("Failed to register for login: \(error)")
+            }
+        }
         
         registerGlobalHotKey()
     }
