@@ -45,14 +45,18 @@ import Cocoa
                     }
                     if let newUrl = URL(string: finalUrlString) {
                         self.logDebug("showQuickEntry: Successfully created newUrl: \(newUrl)")
-                        parsedData = ParsedReminderData(title: parsedData.title, date: parsedData.date, url: newUrl, recurrence: parsedData.recurrence)
+                        parsedData = ParsedReminderData(title: parsedData.title, date: parsedData.date, allDetectedDates: parsedData.allDetectedDates, url: newUrl, recurrence: parsedData.recurrence)
                     } else {
                         self.logDebug("showQuickEntry: Failed to create URL from string: \(finalUrlString)")
                     }
                 }
                 
-                self.logDebug("showQuickEntry: Proceeding to save with URL: \(String(describing: parsedData.url))")
-                self.proceedWithSaving(parsedData: parsedData)
+                if parsedData.allDetectedDates.count > 1 {
+                    self.promptForDateSelection(parsedData: parsedData, dates: parsedData.allDetectedDates)
+                } else {
+                    self.logDebug("showQuickEntry: Proceeding to save with URL: \(String(describing: parsedData.url))")
+                    self.proceedWithSaving(parsedData: parsedData)
+                }
             }
         }
     }
@@ -64,11 +68,34 @@ import Cocoa
         
         let parsedData = TextParser.parse(text: text)
         
-        if parsedData.date == nil {
+        if parsedData.allDetectedDates.count > 1 {
+            self.promptForDateSelection(parsedData: parsedData, dates: parsedData.allDetectedDates)
+        } else if parsedData.date == nil {
             self.promptForDate(parsedData: parsedData)
         } else {
             DispatchQueue.main.async {
                 self.proceedWithSaving(parsedData: parsedData)
+            }
+        }
+    }
+    
+    private func promptForDateSelection(parsedData: ParsedReminderData, dates: [Date]) {
+        if isShowingAlert { return }
+        isShowingAlert = true
+        DispatchQueue.main.async {
+            DateSelectionWindowController.shared.show(dates: dates) { [weak self] selectedDate in
+                guard let self = self else { return }
+                self.isShowingAlert = false
+                
+                guard let selectedDate = selectedDate else {
+                    self.logDebug("promptForDateSelection: canceled")
+                    NSApp.hide(nil)
+                    return
+                }
+                
+                self.logDebug("promptForDateSelection: Date selected. Proceeding with URL: \(String(describing: parsedData.url))")
+                let finalData = ParsedReminderData(title: parsedData.title, date: selectedDate, allDetectedDates: parsedData.allDetectedDates, url: parsedData.url, recurrence: parsedData.recurrence)
+                self.proceedWithSaving(parsedData: finalData)
             }
         }
     }
@@ -109,13 +136,13 @@ import Cocoa
                 if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     // No Date
                     self.logDebug("promptForDate: No date. Proceeding with URL: \(String(describing: finalUrl))")
-                    let finalData = ParsedReminderData(title: parsedData.title, date: parsedData.date, url: finalUrl, recurrence: parsedData.recurrence)
+                    let finalData = ParsedReminderData(title: parsedData.title, date: parsedData.date, allDetectedDates: parsedData.allDetectedDates, url: finalUrl, recurrence: parsedData.recurrence)
                     self.proceedWithSaving(parsedData: finalData)
                 } else {
                     // Set Date
                     let manualParsed = TextParser.parse(text: text)
                     self.logDebug("promptForDate: Date set. Proceeding with URL: \(String(describing: finalUrl))")
-                    let finalData = ParsedReminderData(title: parsedData.title, date: manualParsed.date, url: finalUrl, recurrence: parsedData.recurrence ?? manualParsed.recurrence)
+                    let finalData = ParsedReminderData(title: parsedData.title, date: manualParsed.date, allDetectedDates: manualParsed.allDetectedDates, url: finalUrl, recurrence: parsedData.recurrence ?? manualParsed.recurrence)
                     self.proceedWithSaving(parsedData: finalData)
                 }
             }

@@ -4,6 +4,7 @@ import EventKit
 struct ParsedReminderData {
     let title: String
     let date: Date?
+    let allDetectedDates: [Date]
     let url: URL?
     let recurrence: EKRecurrenceRule?
 }
@@ -111,13 +112,17 @@ class TextParser {
     }
 
     static func extractRelativeDate(text: String, searchRange: NSRange? = nil) -> (Date, NSRange)? {
-        let pattern = "(?i)\\b(?:in\\s+)?(\\d+(?:[.,]\\d+)?)\\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|wks|week|weeks|mo|mos|month|months|y|yr|yrs|year|years)\\b(?:\\s+from\\s+now)?"
+        let units = "m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|wks|week|weeks|mo|mos|month|months|y|yr|yrs|year|years"
+        let pattern = "(?i)(?:\\bin\\s+(\\d+(?:[.,]\\d+)?)\\s*(\(units))\\b|\\b(\\d+(?:[.,]\\d+)?)\\s*(\(units))\\b\\s+from\\s+now)"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         
         let nsRange = searchRange ?? NSRange(text.startIndex..<text.endIndex, in: text)
         if let match = regex.firstMatch(in: text, options: [], range: nsRange) {
-            if let valueRange = Range(match.range(at: 1), in: text),
-               let unitRange = Range(match.range(at: 2), in: text) {
+            let valRange = match.range(at: 1).location != NSNotFound ? match.range(at: 1) : match.range(at: 3)
+            let unRange = match.range(at: 2).location != NSNotFound ? match.range(at: 2) : match.range(at: 4)
+            
+            if let valueRange = Range(valRange, in: text),
+               let unitRange = Range(unRange, in: text) {
                 
                 let valueString = String(text[valueRange]).replacingOccurrences(of: ",", with: ".")
                 guard let value = Double(valueString) else { return nil }
@@ -156,6 +161,7 @@ class TextParser {
     }
 
     static func parse(text: String) -> ParsedReminderData {
+        var allDetectedDates: [Date] = []
         var extractedDate: Date? = nil
         var extractedURL: URL? = nil
         
@@ -218,8 +224,8 @@ class TextParser {
             }
         }
         
-        if let relativeData = extractRelativeDate(text: cleanOriginalText) {
-            extractedDate = relativeData.0
+        while let relativeData = extractRelativeDate(text: cleanOriginalText) {
+            allDetectedDates.append(relativeData.0)
             if let range = Range(relativeData.1, in: cleanOriginalText) {
                 cleanOriginalText.removeSubrange(range)
             }
@@ -229,18 +235,18 @@ class TextParser {
         if let detector = try? NSDataDetector(types: types.rawValue) {
             let matches = detector.matches(in: cleanOriginalText, options: [], range: NSRange(location: 0, length: cleanOriginalText.utf16.count))
             
-            var finalComponents = DateComponents()
-            var hasExplicitDate = false
-            var hasExplicitTime = false
+
             let todayComponents = Calendar.current.dateComponents([.year, .month, .day], from: Date())
             
             // First pass: Extract date components (forward to prioritize earlier and merge) and find first link
+            var dateComponentsGroups: [DateComponents] = []
+            
             for match in matches {
                 if match.resultType == .date {
-                    if extractedDate == nil, let date = match.date {
+                    if let date = match.date {
                         if let range = Range(match.range, in: cleanOriginalText) {
                             let matchedText = String(cleanOriginalText[range]).lowercased()
-                            let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+                            var comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
                             
                             let isToday = comps.year == todayComponents.year && comps.month == todayComponents.month && comps.day == todayComponents.day
                             let isNoon = comps.hour == 12 && comps.minute == 0 && comps.second == 0
@@ -248,31 +254,19 @@ class TextParser {
                             let explicitlyMentioned12 = matchedText.range(of: "(?i)(\\b12\\s*(pm|p\\.m\\.|am|a\\.m\\.)\\b|\\b12:00\\b|\\bnoon\\b|\\bat\\s+12\\b)", options: .regularExpression) != nil
                             let explicitlyMentionedToday = matchedText.range(of: "(?i)\\btoday\\b", options: .regularExpression) != nil
                             
-                            if !hasExplicitDate {
-                                if !isToday || explicitlyMentionedToday {
-                                    finalComponents.year = comps.year
-                                    finalComponents.month = comps.month
-                                    finalComponents.day = comps.day
-                                    hasExplicitDate = true
-                                } else if finalComponents.year == nil {
-                                    finalComponents.year = comps.year
-                                    finalComponents.month = comps.month
-                                    finalComponents.day = comps.day
-                                }
+                            if isToday && !explicitlyMentionedToday {
+                                comps.year = nil
+                                comps.month = nil
+                                comps.day = nil
                             }
                             
-                            if !hasExplicitTime {
-                                if !isNoon || explicitlyMentioned12 {
-                                    finalComponents.hour = comps.hour
-                                    finalComponents.minute = comps.minute
-                                    finalComponents.second = comps.second
-                                    hasExplicitTime = true
-                                } else if finalComponents.hour == nil {
-                                    finalComponents.hour = 7
-                                    finalComponents.minute = 0
-                                    finalComponents.second = 0
-                                }
+                            if isNoon && !explicitlyMentioned12 {
+                                comps.hour = nil
+                                comps.minute = nil
+                                comps.second = nil
                             }
+                            
+                            dateComponentsGroups.append(comps)
                         }
                     }
                 } else if match.resultType == .link {
@@ -282,9 +276,54 @@ class TextParser {
                 }
             }
             
-            if extractedDate == nil && finalComponents.year != nil {
-                extractedDate = Calendar.current.date(from: finalComponents)
+            // Now resolve date groups. Usually they might be separate matches like "August 12" and "at 5pm" or separate dates entirely.
+            var currentMergedComponents = DateComponents()
+            for group in dateComponentsGroups {
+                let hasDateParts = group.year != nil || group.month != nil || group.day != nil
+                let hasTimeParts = group.hour != nil || group.minute != nil
+                
+                let currentHasDate = currentMergedComponents.year != nil || currentMergedComponents.month != nil || currentMergedComponents.day != nil
+                let currentHasTime = currentMergedComponents.hour != nil || currentMergedComponents.minute != nil
+                
+                if (hasDateParts && currentHasDate) || (hasTimeParts && currentHasTime) {
+                    // This is a separate date, let's flush current
+                    if currentHasDate {
+                        if currentMergedComponents.hour == nil {
+                            currentMergedComponents.hour = 7
+                            currentMergedComponents.minute = 0
+                            currentMergedComponents.second = 0
+                        }
+                        if let d = Calendar.current.date(from: currentMergedComponents) {
+                            allDetectedDates.append(d)
+                        }
+                    }
+                    currentMergedComponents = group
+                } else {
+                    if hasDateParts {
+                        currentMergedComponents.year = group.year
+                        currentMergedComponents.month = group.month
+                        currentMergedComponents.day = group.day
+                    }
+                    if hasTimeParts {
+                        currentMergedComponents.hour = group.hour
+                        currentMergedComponents.minute = group.minute
+                        currentMergedComponents.second = group.second
+                    }
+                }
             }
+            
+            // Flush the last one
+            if currentMergedComponents.year != nil || currentMergedComponents.month != nil || currentMergedComponents.day != nil {
+                if currentMergedComponents.hour == nil {
+                    currentMergedComponents.hour = 7
+                    currentMergedComponents.minute = 0
+                    currentMergedComponents.second = 0
+                }
+                if let d = Calendar.current.date(from: currentMergedComponents) {
+                    allDetectedDates.append(d)
+                }
+            }
+
             
             // Second pass: Remove parsed dates from the string (must iterate backwards to preserve ranges)
             for match in matches.reversed() {
@@ -321,6 +360,10 @@ class TextParser {
             finalTitle = "New Reminder"
         }
         
-        return ParsedReminderData(title: finalTitle, date: extractedDate, url: extractedURL, recurrence: recurrenceRule)
+        if !allDetectedDates.isEmpty {
+            extractedDate = allDetectedDates.first
+        }
+        
+        return ParsedReminderData(title: finalTitle, date: extractedDate, allDetectedDates: allDetectedDates, url: extractedURL, recurrence: recurrenceRule)
     }
 }
