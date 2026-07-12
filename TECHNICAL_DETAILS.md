@@ -8,7 +8,7 @@ The application is written natively in Swift and operates as an `LSUIElement` ba
 
 ### 1. `main.swift` & `AppDelegate.swift`
 - **`main.swift`**: The raw entry point of the application. It creates a barebones `NSApplication` instance, sets the `AppDelegate`, and starts the native macOS run loop.
-- **`AppDelegate.swift`**: Implements the `NSApplicationDelegate`. Its primary role is to register the application as a macOS Service provider. It initializes the `ServiceProvider` class, assigns it to `NSApp.servicesProvider`, and calls `NSUpdateDynamicServices()` to flush the macOS services registry. Since the app runs as an `LSUIElement` (no dock icon), it stays persistently active in the background to handle subsequent requests instantly without cold-booting, and to seamlessly retain TCC (Privacy/Reminders) permissions.
+- **`AppDelegate.swift`**: Implements the `NSApplicationDelegate`. Its primary role is to register the application as a macOS Service provider. It programmatically constructs a minimal main menu (including an Edit menu) to ensure standard macOS text editing keyboard shortcuts (like `Cmd+V`, `Cmd+C`) route correctly through the responder chain to the floating panels. It initializes the `ServiceProvider` class, assigns it to `NSApp.servicesProvider`, and calls `NSUpdateDynamicServices()` to flush the macOS services registry. Since the app runs as an `LSUIElement` (no dock icon), it stays persistently active in the background to handle subsequent requests instantly without cold-booting, and to seamlessly retain TCC (Privacy/Reminders) permissions.
 
 ### 2. `ServiceProvider.swift`
 - **Role**: The core orchestrator and the responder for the macOS Services API.
