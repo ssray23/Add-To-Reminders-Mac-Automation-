@@ -111,7 +111,7 @@ class TextParser {
         return EKRecurrenceRule(recurrenceWith: freq, interval: matchedInterval, end: recurrenceEnd)
     }
 
-    static func extractRelativeDate(text: String, searchRange: NSRange? = nil) -> (Date, NSRange)? {
+    static func extractRelativeDate(text: String, searchRange: NSRange? = nil) -> (Date, NSRange, Bool)? {
         let units = "m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|wks|week|weeks|mo|mos|month|months|y|yr|yrs|year|years"
         let pattern = "(?i)(?:\\bin\\s+(\\d+(?:[.,]\\d+)?)\\s*(\(units))\\b|\\b(\\d+(?:[.,]\\d+)?)\\s*(\(units))\\b\\s+from\\s+now)"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
@@ -129,6 +129,7 @@ class TextParser {
                 
                 let unitString = String(text[unitRange]).lowercased()
                 var component = DateComponents()
+                var isDateOnly = false
                 
                 switch unitString {
                 case "m", "min", "mins", "minute", "minutes":
@@ -140,21 +141,25 @@ class TextParser {
                 case "d", "day", "days":
                     component.day = Int(value)
                     component.hour = Int(value.truncatingRemainder(dividingBy: 1) * 24)
+                    isDateOnly = (component.hour == 0)
                 case "w", "wk", "wks", "week", "weeks":
                     component.day = Int(value) * 7
                     component.hour = Int(value.truncatingRemainder(dividingBy: 1) * 24 * 7)
+                    isDateOnly = (component.hour == 0)
                 case "mo", "mos", "month", "months":
                     component.month = Int(value)
                     component.day = Int(value.truncatingRemainder(dividingBy: 1) * 30)
+                    isDateOnly = (component.day == 0)
                 case "y", "yr", "yrs", "year", "years":
                     component.year = Int(value)
                     component.month = Int(value.truncatingRemainder(dividingBy: 1) * 12)
+                    isDateOnly = (component.month == 0)
                 default:
                     break
                 }
                 
                 let date = Calendar.current.date(byAdding: component, to: Date())!
-                return (date, match.range)
+                return (date, match.range, isDateOnly)
             }
         }
         return nil
@@ -224,10 +229,26 @@ class TextParser {
             }
         }
         
+        var extractedRelativeComponents: [(DateComponents, NSRange)] = []
+        
         while let relativeData = extractRelativeDate(text: cleanOriginalText) {
-            allDetectedDates.append(relativeData.0)
-            if let range = Range(relativeData.1, in: cleanOriginalText) {
-                cleanOriginalText.removeSubrange(range)
+            let date = relativeData.0
+            let matchedNSRange = relativeData.1
+            let isDateOnly = relativeData.2
+            
+            var comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+            if isDateOnly {
+                comps.hour = nil
+                comps.minute = nil
+                comps.second = nil
+            }
+            
+            extractedRelativeComponents.append((comps, matchedNSRange))
+            
+            if let range = Range(matchedNSRange, in: cleanOriginalText) {
+                // Replace with spaces to preserve ranges for NSDataDetector
+                let replacement = String(repeating: " ", count: cleanOriginalText.distance(from: range.lowerBound, to: range.upperBound))
+                cleanOriginalText.replaceSubrange(range, with: replacement)
             }
         }
         
@@ -235,11 +256,11 @@ class TextParser {
         if let detector = try? NSDataDetector(types: types.rawValue) {
             let matches = detector.matches(in: cleanOriginalText, options: [], range: NSRange(location: 0, length: cleanOriginalText.utf16.count))
             
-
             let todayComponents = Calendar.current.dateComponents([.year, .month, .day], from: Date())
             
             // First pass: Extract date components (forward to prioritize earlier and merge) and find first link
-            var dateComponentsGroups: [DateComponents] = []
+            var dateComponentsGroupsWithRange: [(DateComponents, NSRange)] = []
+            dateComponentsGroupsWithRange.append(contentsOf: extractedRelativeComponents)
             
             for match in matches {
                 if match.resultType == .date {
@@ -266,7 +287,7 @@ class TextParser {
                                 comps.second = nil
                             }
                             
-                            dateComponentsGroups.append(comps)
+                            dateComponentsGroupsWithRange.append((comps, match.range))
                         }
                     }
                 } else if match.resultType == .link {
@@ -276,9 +297,13 @@ class TextParser {
                 }
             }
             
+            // Sort components by their position in the string
+            dateComponentsGroupsWithRange.sort { $0.1.location < $1.1.location }
+            
             // Now resolve date groups. Usually they might be separate matches like "August 12" and "at 5pm" or separate dates entirely.
             var currentMergedComponents = DateComponents()
-            for group in dateComponentsGroups {
+            for groupData in dateComponentsGroupsWithRange {
+                let group = groupData.0
                 let hasDateParts = group.year != nil || group.month != nil || group.day != nil
                 let hasTimeParts = group.hour != nil || group.minute != nil
                 
