@@ -73,12 +73,17 @@ import Cocoa
         if !parsedData.title.isEmpty {
             let titleWords = parsedData.title.components(separatedBy: .whitespacesAndNewlines)
             for word in titleWords {
-                if let range = dateString.range(of: "(?i)\\b\(NSRegularExpression.escapedPattern(for: word))\\b", options: .regularExpression) {
+                let escapedWord = NSRegularExpression.escapedPattern(for: word)
+                let isAlphanumeric = word.rangeOfCharacter(from: .alphanumerics) != nil
+                let pattern = isAlphanumeric ? "(?i)\\b\(escapedWord)\\b" : "(?i)\(escapedWord)"
+                
+                if let range = dateString.range(of: pattern, options: .regularExpression) {
                     dateString.replaceSubrange(range, with: "")
                 }
             }
         }
         dateString = dateString.replacingOccurrences(of: "(?i)\\b(due|before|at|on|for|in|by|until)\\s*$", with: "", options: .regularExpression)
+        dateString = dateString.replacingOccurrences(of: "^[\\s|&\\-]*|[\\s|&\\-]*$", with: "", options: .regularExpression)
         dateString = dateString.trimmingCharacters(in: .whitespacesAndNewlines)
         
         if dateString.isEmpty {
