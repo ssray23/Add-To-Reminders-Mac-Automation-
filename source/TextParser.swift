@@ -170,31 +170,119 @@ class TextParser {
         var extractedDate: Date? = nil
         var extractedURL: URL? = nil
         
-        var cleanOriginalText = text
+        // Normalize whitespace (tabs, newlines, multiple spaces) to a single space
+        // because NSDataDetector often fails to recognize dates separated by them.
+        var cleanOriginalText = text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
         
         // Pre-process specifically for the date detector to handle common typos
         let typoFixes = [
-            "tommorow": "tomorrow",
-            "tomorow": "tomorrow",
-            "tommorrow": "tomorrow",
-            "tommroow": "tomorrow",
-            "tomrrow": "tomorrow",
-            "tomoro": "tomorrow",
+            // --- TODAY / TONIGHT ---
+            "2day": "today",
+            "2nite": "tonight",
+            "2night": "tonight",
+            "tday": "today",
+            "todae": "today",
+            "todat": "today",
+            "todday": "today",
+            "tonigt": "tonight",
+            "tonigth": "tonight",
+            "tonite": "tonight",
+            "tony": "today", // risky, but common fat-finger
+
+            // --- TOMORROW ---
             "tmrw": "tomorrow",
             "tmw": "tomorrow",
-            "tonite": "tonight",
-            "minuts": "minutes",
-            "minut": "minute",
-            "mintes": "minutes",
+            "tmmw": "tomorrow",
+            "tmo": "tomorrow",
+            "tommow": "tomorrow",
+            "tommroow": "tomorrow",
+            "tommorrow": "tomorrow",
+            "tommrow": "tomorrow",
+            "tomoro": "tomorrow",
+            "tomorow": "tomorrow",
+            "tomoroww": "tomorrow",
+            "tomrrow": "tomorrow",
+
+            // --- YESTERDAY ---
+            "yday": "yesterday",
+            "yesday": "yesterday",
+            "yest": "yesterday",
+            "yesterda": "yesterday",
+            "yesterdy": "yesterday",
+            "yesturday": "yesterday",
+
+            // --- SECONDS ---
+            "sec": "seconds",
+            "secs": "seconds",
+            "secoonds": "seconds",
+            "secons": "seconds",
+            "secnds": "seconds",
+
+            // --- MINUTES ---
+            "min": "minutes",
+            "mins": "minutes",
+            "minit": "minute",
             "minits": "minutes",
-            "hurs": "hours",
-            "huors": "hours",
+            "mintes": "minutes",
+            "minut": "minute",
+            "minuets": "minutes", // A classic musical slip-up
+            "minuits": "minutes",
+            "minuts": "minutes",
+            "mns": "minutes",
+
+            // --- HOURS ---
+            "hoers": "hours",
             "hores": "hours",
             "houra": "hours",
-            "hra": "hrs",
-            "evry": "every",
+            "houres": "hours",
+            "huors": "hours",
+            "hurs": "hours",
+
+            // --- DAYS / WEEKENDS ---
+            "dais": "days",
+            "das": "days",
+            "wekend": "weekend",
+            "weeknd": "weekend",
+            "wkend": "weekend",
+
+            // --- WEEKS / FORTNIGHTS ---
+            "fourtnight": "fortnight",
+            "fortnigth": "fortnight",
+            "fortnite": "fortnight", // Stops the video game hijacking the schedule
+            "weee": "week",
             "wek": "week",
-            "mounth": "month"
+            "wke": "week",
+            "wk": "week",
+            "wks": "weeks",
+
+            // --- MONTHS / YEARS ---
+            "mnh": "month",
+            "mnth": "month",
+            "mnths": "months",
+            "monsth": "month",
+            "monts": "months",
+            "moth": "month",
+            "mounth": "month",
+            "mounths": "months",
+            "yera": "year",
+            "yeras": "years",
+            "yer": "year",
+            "yers": "years",
+            "yr": "year",
+            "yrs": "years",
+
+            // --- FREQUENCY & MISC ---
+            "dailey": "daily",
+            "daly": "daily",
+            "everi": "every",
+            "evey": "every",
+            "evrey": "every",
+            "evry": "every",
+            "monthy": "monthly",
+            "mounthly": "monthly",
+            "weekely": "weekly",
+            "wekly": "weekly",
+            "wkly": "weekly"
         ]
         
         let ordinalFixes = [
