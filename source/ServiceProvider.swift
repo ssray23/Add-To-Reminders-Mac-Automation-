@@ -23,18 +23,24 @@ import Cocoa
         if isShowingAlert { return }
         isShowingAlert = true
         DispatchQueue.main.async {
-            QuickEntryWindowController.shared.show(prompt: "What do you want to be reminded about?",
-                                                   placeholder: "e.g. Call John tomorrow at 7am") { [weak self] result in
+            QuickEntryWindowController.shared.show(prompt: "What do you want to be reminded about?") { [weak self] result in
                 guard let self = self else { return }
                 self.isShowingAlert = false
                 
-                guard let resultTuple = result, !resultTuple.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                guard let resultTuple = result, !(resultTuple.title + resultTuple.dateText).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     self.logDebug("showQuickEntry: canceled or empty text")
+                    NSApp.setActivationPolicy(.accessory)
                     NSApp.hide(nil)
                     return
                 }
                 
-                var parsedData = TextParser.parse(text: resultTuple.text)
+                let combinedText = resultTuple.title + " " + resultTuple.dateText
+                var parsedData = TextParser.parse(text: combinedText)
+                
+                if let selectedDate = resultTuple.selectedDate {
+                    parsedData = ParsedReminderData(title: parsedData.title, date: selectedDate, allDetectedDates: parsedData.allDetectedDates, url: parsedData.url, recurrence: parsedData.recurrence)
+                }
+                
                 self.logDebug("showQuickEntry: parsed text, url is \(String(describing: parsedData.url))")
                 self.logDebug("showQuickEntry: urlText from UI is '\(resultTuple.url)'")
                 
@@ -51,12 +57,8 @@ import Cocoa
                     }
                 }
                 
-                if parsedData.allDetectedDates.count > 1 {
-                    self.promptForDateSelection(parsedData: parsedData, dates: parsedData.allDetectedDates)
-                } else {
-                    self.logDebug("showQuickEntry: Proceeding to save with URL: \(String(describing: parsedData.url))")
-                    self.proceedWithSaving(parsedData: parsedData)
-                }
+                self.logDebug("showQuickEntry: Proceeding to save with URL: \(String(describing: parsedData.url))")
+                self.proceedWithSaving(parsedData: parsedData)
             }
         }
     }
@@ -67,14 +69,61 @@ import Cocoa
         }
         
         let parsedData = TextParser.parse(text: text)
+        var dateString = text
+        if !parsedData.title.isEmpty {
+            let titleWords = parsedData.title.components(separatedBy: .whitespacesAndNewlines)
+            for word in titleWords {
+                if let range = dateString.range(of: "(?i)\\b\(NSRegularExpression.escapedPattern(for: word))\\b", options: .regularExpression) {
+                    dateString.replaceSubrange(range, with: "")
+                }
+            }
+        }
+        dateString = dateString.replacingOccurrences(of: "(?i)\\b(due|before|at|on|for|in|by|until)\\s*$", with: "", options: .regularExpression)
+        dateString = dateString.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        if parsedData.allDetectedDates.count > 1 {
-            self.promptForDateSelection(parsedData: parsedData, dates: parsedData.allDetectedDates)
-        } else if parsedData.date == nil {
-            self.promptForDate(parsedData: parsedData)
-        } else {
-            DispatchQueue.main.async {
-                self.proceedWithSaving(parsedData: parsedData)
+        if dateString.isEmpty {
+            dateString = "Tomorrow at 7am"
+        }
+        
+        if isShowingAlert { return }
+        isShowingAlert = true
+        DispatchQueue.main.async {
+            QuickEntryWindowController.shared.show(prompt: "Add to Reminders",
+                                                   initialTitle: parsedData.title,
+                                                   initialDate: dateString,
+                                                   detectedDates: parsedData.allDetectedDates) { [weak self] result in
+                guard let self = self else { return }
+                self.isShowingAlert = false
+                
+                guard let resultTuple = result, !(resultTuple.title + resultTuple.dateText).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    self.logDebug("processText: canceled or empty text")
+                    NSApp.setActivationPolicy(.accessory)
+                    NSApp.hide(nil)
+                    return
+                }
+                
+                let combinedText = resultTuple.title + " " + resultTuple.dateText
+                var newParsedData = TextParser.parse(text: combinedText)
+                
+                if let selectedDate = resultTuple.selectedDate {
+                    newParsedData = ParsedReminderData(title: newParsedData.title, date: selectedDate, allDetectedDates: newParsedData.allDetectedDates, url: newParsedData.url, recurrence: newParsedData.recurrence)
+                }
+                
+                // Preserve URL from original parse if not modified, or from UI
+                var finalUrl = parsedData.url
+                if !resultTuple.url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    var finalUrlString = resultTuple.url.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !finalUrlString.lowercased().hasPrefix("http") {
+                        finalUrlString = "https://" + finalUrlString
+                    }
+                    if let newUrl = URL(string: finalUrlString) {
+                        finalUrl = newUrl
+                    }
+                }
+                
+                newParsedData = ParsedReminderData(title: newParsedData.title, date: newParsedData.date, allDetectedDates: newParsedData.allDetectedDates, url: finalUrl, recurrence: newParsedData.recurrence)
+                
+                self.proceedWithSaving(parsedData: newParsedData)
             }
         }
     }
@@ -89,6 +138,7 @@ import Cocoa
                 
                 guard let selectedDate = selectedDate else {
                     self.logDebug("promptForDateSelection: canceled")
+                    NSApp.setActivationPolicy(.accessory)
                     NSApp.hide(nil)
                     return
                 }
@@ -100,57 +150,9 @@ import Cocoa
         }
     }
     
-    private func promptForDate(parsedData: ParsedReminderData) {
-        if isShowingAlert { return }
-        isShowingAlert = true
-        DispatchQueue.main.async {
-            QuickEntryWindowController.shared.show(prompt: "When to remind you? (Clear text for 'No Date')",
-                                                   placeholder: "e.g. tomorrow at 7am repeat weekly",
-                                                   initialText: "Tomorrow at 7am") { [weak self] result in
-                guard let self = self else { return }
-                self.isShowingAlert = false
-                
-                guard let resultTuple = result else {
-                    self.logDebug("promptForDate: canceled")
-                    return
-                }
-                
-                let text = resultTuple.text
-                var finalUrl = parsedData.url
-                
-                self.logDebug("promptForDate: UI urlText = '\(resultTuple.url)', initial finalUrl = \(String(describing: finalUrl))")
-                
-                if !resultTuple.url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    var finalUrlString = resultTuple.url.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !finalUrlString.lowercased().hasPrefix("http") {
-                        finalUrlString = "https://" + finalUrlString
-                    }
-                    if let newUrl = URL(string: finalUrlString) {
-                        self.logDebug("promptForDate: Successfully created newUrl: \(newUrl)")
-                        finalUrl = newUrl
-                    } else {
-                        self.logDebug("promptForDate: Failed to create URL from string: \(finalUrlString)")
-                    }
-                }
-                
-                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    // No Date
-                    self.logDebug("promptForDate: No date. Proceeding with URL: \(String(describing: finalUrl))")
-                    let finalData = ParsedReminderData(title: parsedData.title, date: parsedData.date, allDetectedDates: parsedData.allDetectedDates, url: finalUrl, recurrence: parsedData.recurrence)
-                    self.proceedWithSaving(parsedData: finalData)
-                } else {
-                    // Set Date
-                    let manualParsed = TextParser.parse(text: text)
-                    self.logDebug("promptForDate: Date set. Proceeding with URL: \(String(describing: finalUrl))")
-                    let finalData = ParsedReminderData(title: parsedData.title, date: manualParsed.date, allDetectedDates: manualParsed.allDetectedDates, url: finalUrl, recurrence: parsedData.recurrence ?? manualParsed.recurrence)
-                    self.proceedWithSaving(parsedData: finalData)
-                }
-            }
-        }
-    }
-    
     private func proceedWithSaving(parsedData: ParsedReminderData) {
         // Hide the app so the previous app gets focus back immediately
+        NSApp.setActivationPolicy(.accessory)
         NSApp.hide(nil)
         
         HUDWindowController.shared.show(state: .processing)

@@ -22,6 +22,7 @@ class TextParser {
         var matchedFrequency: EKRecurrenceFrequency?
         var matchedInterval: Int = 1
         var matchRangeToRemove: Range<String.Index>?
+        var matchedDaysOfTheWeek: [EKRecurrenceDayOfWeek]? = nil
         
         let dynamicPattern = "(?i)\\b(?:repeat\\s+)?every\\s+(\\d+)\\s+(day|week|month|year)s?\\b"
         if let regex = try? NSRegularExpression(pattern: dynamicPattern, options: []) {
@@ -48,16 +49,27 @@ class TextParser {
         }
         
         if matchedFrequency == nil {
-            let patterns: [(regex: String, frequency: EKRecurrenceFrequency, interval: Int)] = [
-                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*day\\b", .daily, 2),
-                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*week\\b", .weekly, 2),
-                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*month\\b", .monthly, 2),
-                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*year\\b", .yearly, 2),
-                ("(?i)\\b(?:repeat\\s+)?(every\\s*day|daily)\\b", .daily, 1),
-                ("(?i)\\b(?:repeat\\s+)?(every\\s*week|weekly)\\b", .weekly, 1),
-                ("(?i)\\b(?:repeat\\s+)?(every\\s*month|monthly)\\b", .monthly, 1),
-                ("(?i)\\b(?:repeat\\s+)?(every\\s*year|yearly)\\b", .yearly, 1),
-                ("(?i)\\b(repeat)\\b(?=\\s+(?:for|until|ending|ends))", .daily, 1)
+            let patterns: [(regex: String, frequency: EKRecurrenceFrequency, interval: Int, daysOfTheWeek: [EKRecurrenceDayOfWeek]?)] = [
+                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*day\\b", .daily, 2, nil),
+                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*week\\b", .weekly, 2, nil),
+                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*month\\b", .monthly, 2, nil),
+                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*year\\b", .yearly, 2, nil),
+                ("(?i)\\b(?:repeat\\s+)?(?:on\\s+)?(?:weekdays|every\\s+weekday)\\b", .weekly, 1, [
+                    EKRecurrenceDayOfWeek(.monday),
+                    EKRecurrenceDayOfWeek(.tuesday),
+                    EKRecurrenceDayOfWeek(.wednesday),
+                    EKRecurrenceDayOfWeek(.thursday),
+                    EKRecurrenceDayOfWeek(.friday)
+                ]),
+                ("(?i)\\b(?:repeat\\s+)?(?:on\\s+)?(?:weekends|every\\s+weekend)\\b", .weekly, 1, [
+                    EKRecurrenceDayOfWeek(.saturday),
+                    EKRecurrenceDayOfWeek(.sunday)
+                ]),
+                ("(?i)\\b(?:repeat\\s+)?(every\\s*day|daily)\\b", .daily, 1, nil),
+                ("(?i)\\b(?:repeat\\s+)?(every\\s*week|weekly)\\b", .weekly, 1, nil),
+                ("(?i)\\b(?:repeat\\s+)?(every\\s*month|monthly)\\b", .monthly, 1, nil),
+                ("(?i)\\b(?:repeat\\s+)?(every\\s*year|yearly)\\b", .yearly, 1, nil),
+                ("(?i)\\b(repeat)\\b(?=\\s+(?:for|until|ending|ends))", .daily, 1, nil)
             ]
             
             for item in patterns {
@@ -68,6 +80,7 @@ class TextParser {
                             matchRangeToRemove = range
                             matchedFrequency = item.frequency
                             matchedInterval = item.interval
+                            matchedDaysOfTheWeek = item.daysOfTheWeek
                             break
                         }
                     }
@@ -82,7 +95,7 @@ class TextParser {
         text.removeSubrange(removeRange)
         
         var recurrenceEnd: EKRecurrenceEnd? = nil
-        let untilRegex = try? NSRegularExpression(pattern: "(?i)\\b(until|ending\\s+on|ends\\s+on|for\\s*(?:the\\s*)?next|for)\\b", options: [])
+        let untilRegex = try? NSRegularExpression(pattern: "(?i)\\b(until|ending\\s+on|ends\\s+on|for\\s*(?:the\\s*)?next)\\b", options: [])
         if let untilRegex = untilRegex,
            let untilMatch = untilRegex.firstMatch(in: text, options: [], range: NSRange(text.startIndex..<text.endIndex, in: text)) {
             
@@ -108,7 +121,17 @@ class TextParser {
             }
         }
         
-        return EKRecurrenceRule(recurrenceWith: freq, interval: matchedInterval, end: recurrenceEnd)
+        return EKRecurrenceRule(
+            recurrenceWith: freq,
+            interval: matchedInterval,
+            daysOfTheWeek: matchedDaysOfTheWeek,
+            daysOfTheMonth: nil,
+            monthsOfTheYear: nil,
+            weeksOfTheYear: nil,
+            daysOfTheYear: nil,
+            setPositions: nil,
+            end: recurrenceEnd
+        )
     }
 
     static func extractRelativeDate(text: String, searchRange: NSRange? = nil) -> (Date, NSRange, Bool)? {
@@ -450,8 +473,8 @@ class TextParser {
         
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\u{200B}", with: "")
         
-        // Remove trailing prepositions like "at", "on", "for", "in" which might have been left behind before the date
-        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\s+(expires|due|before|at|on|for|in|by|until)\\s*$", with: "", options: .regularExpression)
+        // Remove trailing prepositions like "at", "on", "for", "in", "or", "and" which might have been left behind before the date
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\s+(expires|due|before|at|on|for|in|by|until|or|and)\\s*$", with: "", options: .regularExpression)
         
         // Clean up leftover words in parentheses if they are just prepositions/keywords now
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\(\\s*(expires|due|before|on|at|by|until|for|in)\\s*\\)", with: "()", options: .regularExpression)

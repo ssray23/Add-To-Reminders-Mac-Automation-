@@ -52,7 +52,6 @@ class DateSelectionWindowController: NSWindowController, NSWindowDelegate {
     
     private func closeWindow() {
         self.window?.orderOut(nil)
-        NSApp.setActivationPolicy(.accessory)
     }
     
     func windowShouldClose(_ sender: NSWindow) -> Bool {

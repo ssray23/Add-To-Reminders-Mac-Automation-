@@ -10,6 +10,7 @@ echo "Stopping existing app instances..."
 killall "$APP_NAME" 2>/dev/null || true
 
 # Create directories
+rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR"
 mkdir -p "$APP_DIR/Contents/Resources"
 

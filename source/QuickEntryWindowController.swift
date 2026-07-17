@@ -8,11 +8,10 @@ class QuickEntryPanel: NSPanel {
 
 class QuickEntryWindowController: NSWindowController, NSWindowDelegate {
     static let shared = QuickEntryWindowController()
-    
-    private var completion: (((text: String, url: String)?) -> Void)?
+    private var completion: (((title: String, dateText: String, selectedDate: Date?, url: String)?) -> Void)?
     
     init() {
-        let rect = NSRect(x: 0, y: 0, width: 600, height: 210)
+        let rect = NSRect(x: 0, y: 0, width: 600, height: 210) // Will auto-resize due to SwiftUI
         let window = QuickEntryPanel(contentRect: rect,
                              styleMask: [.borderless, .nonactivatingPanel],
                              backing: .buffered,
@@ -35,7 +34,7 @@ class QuickEntryWindowController: NSWindowController, NSWindowDelegate {
         fatalError("init(coder:) has not been implemented")
     }
     
-    func show(prompt: String, placeholder: String, initialText: String = "", completion: @escaping ((text: String, url: String)?) -> Void) {
+    func show(prompt: String, titlePlaceholder: String = "What do you want to be reminded about?", datePlaceholder: String = "e.g. tomorrow at 7am repeat weekly", initialTitle: String = "", initialDate: String = "", detectedDates: [Date] = [], completion: @escaping ((title: String, dateText: String, selectedDate: Date?, url: String)?) -> Void) {
         self.completion = completion
         
         NSApp.setActivationPolicy(.regular)
@@ -47,7 +46,7 @@ class QuickEntryWindowController: NSWindowController, NSWindowDelegate {
         
         self.window?.makeKeyAndOrderFront(nil)
         
-        let view = QuickEntryView(prompt: prompt, placeholder: placeholder, text: initialText) { [weak self] result in
+        let view = QuickEntryView(prompt: prompt, titlePlaceholder: titlePlaceholder, datePlaceholder: datePlaceholder, titleText: initialTitle, dateText: initialDate, detectedDates: detectedDates) { [weak self] result in
             self?.closeWindow()
             completion(result)
         }
@@ -57,7 +56,6 @@ class QuickEntryWindowController: NSWindowController, NSWindowDelegate {
     
     private func closeWindow() {
         self.window?.orderOut(nil)
-        NSApp.setActivationPolicy(.accessory)
     }
     
     func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -69,16 +67,28 @@ class QuickEntryWindowController: NSWindowController, NSWindowDelegate {
 
 struct QuickEntryView: View {
     let prompt: String
-    let placeholder: String
-    @State var text: String
+    let titlePlaceholder: String
+    let datePlaceholder: String
+    @State var titleText: String
+    @State var dateText: String
+    let detectedDates: [Date]
+    @State var selectedDate: Date?
     @State var urlText: String = ""
-    let onComplete: (((text: String, url: String)?) -> Void)
+    let onComplete: (((title: String, dateText: String, selectedDate: Date?, url: String)?) -> Void)
     
     enum Field {
-        case text
+        case title
+        case date
         case url
     }
     @FocusState private var focusedField: Field?
+    
+    private let dateFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.timeStyle = .short
+        return df
+    }()
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -86,7 +96,7 @@ struct QuickEntryView: View {
                 .font(.headline)
                 .foregroundColor(.primary)
             
-            TextField(placeholder, text: $text)
+            TextField(titlePlaceholder, text: $titleText)
                 .textFieldStyle(PlainTextFieldStyle())
                 .font(.system(size: 18))
                 .padding(12)
@@ -94,17 +104,66 @@ struct QuickEntryView: View {
                 .cornerRadius(8)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.accentColor.opacity(focusedField == .text ? 1.0 : 0.0), lineWidth: 2)
+                        .stroke(Color.accentColor.opacity(focusedField == .title ? 1.0 : 0.0), lineWidth: 2)
                 )
-                .focused($focusedField, equals: .text)
+                .focused($focusedField, equals: .title)
                 .onSubmit {
-                    onComplete((text: text, url: urlText))
+                    onComplete((title: titleText, dateText: dateText, selectedDate: selectedDate, url: urlText))
                 }
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        focusedField = .text
+                        focusedField = .title
+                    }
+                    if let first = detectedDates.first, detectedDates.count > 1 {
+                        selectedDate = first
                     }
                 }
+                
+            if detectedDates.count > 1 {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Multiple dates detected. Which one would you like to use?")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    ForEach(detectedDates, id: \.self) { date in
+                        Button(action: {
+                            selectedDate = date
+                        }) {
+                            HStack {
+                                Image(systemName: selectedDate == date ? "largecircle.fill.circle" : "circle")
+                                    .foregroundColor(selectedDate == date ? .accentColor : .secondary)
+                                Text(dateFormatter.string(from: date))
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.primary)
+                                Spacer()
+                            }
+                            .padding(8)
+                            .background(Color(NSColor.textBackgroundColor).opacity(selectedDate == date ? 1.0 : 0.6))
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.accentColor.opacity(selectedDate == date ? 1.0 : 0.0), lineWidth: 2)
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+            } else {
+                TextField(datePlaceholder, text: $dateText)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .font(.system(size: 14))
+                    .padding(12)
+                    .background(Color(NSColor.textBackgroundColor))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.accentColor.opacity(focusedField == .date ? 1.0 : 0.0), lineWidth: 2)
+                    )
+                    .focused($focusedField, equals: .date)
+                    .onSubmit {
+                        onComplete((title: titleText, dateText: dateText, selectedDate: nil, url: urlText))
+                    }
+            }
                 
             TextField("URL (Optional)", text: $urlText)
                 .textFieldStyle(PlainTextFieldStyle())
@@ -118,7 +177,7 @@ struct QuickEntryView: View {
                 )
                 .focused($focusedField, equals: .url)
                 .onSubmit {
-                    onComplete((text: text, url: urlText))
+                    onComplete((title: titleText, dateText: dateText, selectedDate: selectedDate, url: urlText))
                 }
             
             HStack {
@@ -138,7 +197,7 @@ struct QuickEntryView: View {
                 .keyboardShortcut(.escape, modifiers: [])
                 
                 Button(action: {
-                    onComplete((text: text, url: urlText))
+                    onComplete((title: titleText, dateText: dateText, selectedDate: selectedDate, url: urlText))
                 }) {
                     Text("Add")
                         .fontWeight(.medium)
@@ -150,6 +209,8 @@ struct QuickEntryView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
                 .keyboardShortcut(.return, modifiers: [])
+                .disabled(detectedDates.count > 1 && selectedDate == nil)
+                .opacity(detectedDates.count > 1 && selectedDate == nil ? 0.5 : 1.0)
             }
         }
         .padding(24)

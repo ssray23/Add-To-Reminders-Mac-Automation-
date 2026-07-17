@@ -12,10 +12,10 @@ The application is written natively in Swift and operates as an `LSUIElement` ba
 
 ### 2. `ServiceProvider.swift`
 - **Role**: The core orchestrator and the responder for the macOS Services API.
-- **Details**: It exposes an Objective-C accessible method `@objc func processText(_ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>)` which macOS invokes when the user triggers the service. It retrieves the highlighted string from the pasteboard, delegates parsing to `TextParser`, and manages control flow. If multiple dates are extracted, it presents a native floating window using `DateSelectionWindowController` to let the user select the desired date. If no date is extracted, it presents a native translucent window via `QuickEntryWindowController` to solicit a date/time from the user (with natural language support). Once a date is resolved, it triggers the HUD animation and invokes `RemindersManager` to save the reminder.
+- **Details**: It exposes an Objective-C accessible method `@objc func processText(_ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>)` which macOS invokes when the user triggers the service. It retrieves the highlighted string from the pasteboard, delegates parsing to `TextParser`, and manages control flow. It always presents a native translucent window via `QuickEntryWindowController` to allow the user to review the parsed title, date, and URL. If multiple dates are extracted, the Quick Entry window dynamically renders radio buttons for date selection. Once the user clicks "Add", it triggers the HUD animation and invokes `RemindersManager` to save the reminder.
 
 ### 3. `QuickEntryWindowController.swift` & `DateSelectionWindowController.swift`
-- **Role**: Provides native, borderless SwiftUI floating windows for manual text entry/date prompts and multiple date selection, avoiding the blocking event loops of standard `NSAlert` modals.
+- **Role**: Provides a native, borderless SwiftUI floating window for manual text entry, date prompts, URL injection, and inline multiple date selection (via radio buttons). It combines what used to be two separate windows into a single unified interface, avoiding the blocking event loops of standard `NSAlert` modals.
 
 ### 4. `TextParser.swift`
 - **Role**: The natural language processing engine for dates, times, recurrence, and URLs.
