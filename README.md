@@ -28,7 +28,7 @@ The project operates as a headless macOS Background Service that listens for Pas
 - **`RemindersManager.swift`:** Uses `EventKit` (`EKEventStore`) to safely request authorization and save the reminder directly to your default Reminders list.
 - **`HUDWindowController.swift` & `AnimationView.swift`:** Handles the immediate visual feedback via a borderless, transparent `NSWindow` hosting a SwiftUI view.
 - **`NotificationHelper.swift`:** Formats the final due date with ordinal suffixes and uses a background AppleScript (`osascript`) command to seamlessly trigger a native notification from the Reminders app.
-- **`build.sh`:** A custom bash script that compiles the Swift files, structures the `.app` bundle, copies the `Info.plist`, bundles the official Reminders `AppIcon.icns`, strips extended attributes, applies an ad-hoc code signature, and dynamically updates the macOS Services registry (`/System/Library/CoreServices/pbs`).
+- **`build.sh`:** A custom bash script that compiles the Swift files, structures the `.app` bundle directly in `~/Applications` (avoiding iCloud sync issues), copies the `Info.plist`, bundles the official Reminders `AppIcon.icns`, strips extended attributes, applies an ad-hoc code signature, and dynamically updates the macOS Services registry (`/System/Library/CoreServices/pbs`).
 
 ## How to Build & Run
 1. Open Terminal and navigate to this project directory.
@@ -40,7 +40,7 @@ The project operates as a headless macOS Background Service that listens for Pas
    ```bash
    ./build.sh
    ```
-   *This automatically force-quits any old background instances, compiles the Swift code, builds `AddToReminders.app`, and registers it with macOS.*
+   *This automatically force-quits any old background instances, compiles the Swift code, builds `AddToReminders.app` securely into your `~/Applications` directory, and registers it with macOS.*
 4. Go to **System Settings > Keyboard > Keyboard Shortcuts > Services**.
 5. Under "Text", ensure **Add to Reminders** is checked.
 6. To use it, simply highlight text in any app (Safari, Notes, Mail, etc.), right-click, select **Services**, and click **Add to Reminders**. 

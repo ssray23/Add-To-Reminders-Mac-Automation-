@@ -1,8 +1,20 @@
 #!/bin/bash
 set -e
 
+REPO_DIR="$PWD"
+
+# The built .app MUST live outside any cloud-synced folder (iCloud Drive, OneDrive, etc).
+# macOS verifies the calling app's code signature by reading its binary off disk before
+# granting certain requests (NSOpenPanel, FileManager.trashItem, etc). If that binary sits
+# inside a live-synced folder, that read can stall indefinitely waiting on the sync daemon
+# instead of returning instantly like it would from local disk. Building to ~/Applications
+# keeps the source in iCloud Drive (fine, it's just text) while the runnable app itself
+# is always local-only.
+APP_OUTPUT_DIR="$HOME/Applications"
+mkdir -p "$APP_OUTPUT_DIR"
+
 APP_NAME="AddToReminders"
-APP_DIR="$APP_NAME.app"
+APP_DIR="$APP_OUTPUT_DIR/$APP_NAME.app"
 MACOS_DIR="$APP_DIR/Contents/MacOS"
 
 # Force quit any existing instances so the new build can run immediately
@@ -26,6 +38,9 @@ cp /System/Applications/Reminders.app/Contents/Resources/AppIcon.icns "$APP_DIR/
 echo "Copying Info.plist..."
 cp Info.plist "$APP_DIR/Contents/Info.plist"
 
+# Touch the app bundle so Finder registers the changes
+touch "$APP_DIR"
+
 # Sign the app
 echo "Code signing..."
 xattr -cr "$APP_DIR"
@@ -35,11 +50,12 @@ codesign --force --deep --sign - "$APP_DIR"
 echo "Updating dynamic services..."
 /System/Library/CoreServices/pbs -flush
 
-echo "Build complete. App is at $APP_DIR"
+echo "✅ Build complete! App installed to: $APP_DIR"
+echo "   Run it with: open \"$APP_DIR\""
 
 # Package into a deployable zip
 echo "Packaging zip file..."
-rm -f AddToReminders_Install.zip
-zip -q -r AddToReminders_Install.zip "$APP_DIR"
+rm -f "$REPO_DIR/AddToReminders_Install.zip"
+(cd "$APP_OUTPUT_DIR" && zip -q -r "$REPO_DIR/AddToReminders_Install.zip" "$APP_NAME.app")
 
 echo "Done! You can share AddToReminders_Install.zip"
