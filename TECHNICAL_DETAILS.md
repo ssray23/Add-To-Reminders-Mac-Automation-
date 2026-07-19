@@ -12,10 +12,11 @@ The application is written natively in Swift and operates as an `LSUIElement` ba
 
 ### 2. `ServiceProvider.swift`
 - **Role**: The core orchestrator and the responder for the macOS Services API.
-- **Details**: It exposes an Objective-C accessible method `@objc func processText(_ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>)` which macOS invokes when the user triggers the service. It retrieves the highlighted string from the pasteboard, delegates parsing to `TextParser`, and manages control flow. It always presents a native translucent window via `QuickEntryWindowController` to allow the user to review the parsed title, date, and URL. If multiple dates are extracted, the Quick Entry window dynamically renders radio buttons for date selection. Once the user clicks "Add", it triggers the HUD animation and invokes `RemindersManager` to save the reminder.
+- **Details**: It exposes an Objective-C accessible method `@objc func processText(_ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>)` which macOS invokes when the user triggers the service. It retrieves the highlighted string from the pasteboard, delegates parsing to `TextParser`, and manages control flow. It always presents a native translucent window via `QuickEntryWindowController` to allow the user to review the parsed title, date, URL, and select the target reminder list. If multiple dates are extracted, the Quick Entry window dynamically renders radio buttons for date selection. Once the user clicks "Add", it captures the selected list identifier, triggers the HUD animation, and invokes `RemindersManager` to save the reminder.
 
 ### 3. `QuickEntryWindowController.swift` & `DateSelectionWindowController.swift`
 - **Role**: Provides a native, borderless SwiftUI floating window for manual text entry, date prompts, URL injection, and inline multiple date selection (via radio buttons). It combines what used to be two separate windows into a single unified interface, avoiding the blocking event loops of standard `NSAlert` modals.
+- **Features**: Includes a dropdown Picker allowing the user to select the target Reminders list, defaulting to `"Suddha's Reminders"`. Features a unified 13pt system font across all elements for a streamlined and clean macOS control style.
 
 ### 4. `TextParser.swift`
 - **Role**: The natural language processing engine for dates, times, recurrence, and URLs.
@@ -28,7 +29,7 @@ The application is written natively in Swift and operates as an `LSUIElement` ba
 
 ### 5. `RemindersManager.swift`
 - **Role**: Handles persistence and interactions with Apple's `EventKit` framework.
-- **Details**: A singleton wrapper around `EKEventStore`. It asynchronously requests authorization to access Reminders (`EKEventStore.requestFullAccessToReminders`). Once granted, it constructs an `EKReminder` object, applies the parsed due date (`dueDateComponents`), attaches the recurrence rule (`EKRecurrenceRule`), sets an absolute alarm (`EKAlarm`) so a notification fires at the target time, and commits the reminder directly to the user's default Reminders list.
+- **Details**: A singleton wrapper around `EKEventStore`. It asynchronously requests authorization to access Reminders (`EKEventStore.requestFullAccessToReminders`). Once granted, it fetches the available reminder lists. If `"Suddha's Reminders"` is not present, it automatically creates it within the default source. It compiles the list of options for the UI dropdown selector and commits the constructed `EKReminder` directly to the chosen selected reminder calendar list (or falls back to the default calendar list).
 
 ### 6. `HUDWindowController.swift`
 - **Role**: Manages the transient, borderless heads-up display (HUD).

@@ -58,7 +58,7 @@ import Cocoa
                 }
                 
                 self.logDebug("showQuickEntry: Proceeding to save with URL: \(String(describing: parsedData.url))")
-                self.proceedWithSaving(parsedData: parsedData)
+                self.proceedWithSaving(parsedData: parsedData, listIdentifier: resultTuple.listIdentifier)
             }
         }
     }
@@ -71,11 +71,18 @@ import Cocoa
         let parsedData = TextParser.parse(text: text)
         var dateString = text
         if !parsedData.title.isEmpty {
+            let wordCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_"))
             let titleWords = parsedData.title.components(separatedBy: .whitespacesAndNewlines)
             for word in titleWords {
+                guard !word.isEmpty else { continue }
                 let escapedWord = NSRegularExpression.escapedPattern(for: word)
-                let isAlphanumeric = word.rangeOfCharacter(from: .alphanumerics) != nil
-                let pattern = isAlphanumeric ? "(?i)\\b\(escapedWord)\\b" : "(?i)\(escapedWord)"
+                
+                let startsWithWordChar = word.first?.unicodeScalars.first.map { wordCharacters.contains($0) } ?? false
+                let endsWithWordChar = word.last?.unicodeScalars.first.map { wordCharacters.contains($0) } ?? false
+                
+                let startBoundary = startsWithWordChar ? "\\b" : ""
+                let endBoundary = endsWithWordChar ? "\\b" : ""
+                let pattern = "(?i)\(startBoundary)\(escapedWord)\(endBoundary)"
                 
                 if let range = dateString.range(of: pattern, options: .regularExpression) {
                     dateString.replaceSubrange(range, with: "")
@@ -128,12 +135,12 @@ import Cocoa
                 
                 newParsedData = ParsedReminderData(title: newParsedData.title, date: newParsedData.date, allDetectedDates: newParsedData.allDetectedDates, url: finalUrl, recurrence: newParsedData.recurrence)
                 
-                self.proceedWithSaving(parsedData: newParsedData)
+                self.proceedWithSaving(parsedData: newParsedData, listIdentifier: resultTuple.listIdentifier)
             }
         }
     }
     
-    private func promptForDateSelection(parsedData: ParsedReminderData, dates: [Date]) {
+    private func promptForDateSelection(parsedData: ParsedReminderData, dates: [Date], listIdentifier: String? = nil) {
         if isShowingAlert { return }
         isShowingAlert = true
         DispatchQueue.main.async {
@@ -150,12 +157,12 @@ import Cocoa
                 
                 self.logDebug("promptForDateSelection: Date selected. Proceeding with URL: \(String(describing: parsedData.url))")
                 let finalData = ParsedReminderData(title: parsedData.title, date: selectedDate, allDetectedDates: parsedData.allDetectedDates, url: parsedData.url, recurrence: parsedData.recurrence)
-                self.proceedWithSaving(parsedData: finalData)
+                self.proceedWithSaving(parsedData: finalData, listIdentifier: listIdentifier)
             }
         }
     }
     
-    private func proceedWithSaving(parsedData: ParsedReminderData) {
+    private func proceedWithSaving(parsedData: ParsedReminderData, listIdentifier: String? = nil) {
         // Hide the app so the previous app gets focus back immediately
         NSApp.setActivationPolicy(.accessory)
         NSApp.hide(nil)
@@ -170,7 +177,7 @@ import Cocoa
                 return
             }
             
-            RemindersManager.shared.createReminder(data: parsedData) { success in
+            RemindersManager.shared.createReminder(data: parsedData, listIdentifier: listIdentifier) { success in
                 DispatchQueue.main.async {
                     if success {
                         NotificationHelper.showNotification(title: parsedData.title, date: parsedData.date)

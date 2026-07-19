@@ -27,10 +27,44 @@ class RemindersManager {
         }
     }
     
-    func createReminder(data: ParsedReminderData, completion: @escaping (Bool) -> Void) {
+    func getReminderLists() -> [EKCalendar] {
+        var calendars = eventStore.calendars(for: .reminder)
+        if !calendars.contains(where: { $0.title == "Suddha's Reminders" }) {
+            if let newCal = createReminderList(title: "Suddha's Reminders") {
+                calendars.append(newCal)
+            }
+        }
+        return calendars
+    }
+    
+    private func createReminderList(title: String) -> EKCalendar? {
+        let newCalendar = EKCalendar(for: .reminder, eventStore: eventStore)
+        newCalendar.title = title
+        
+        if let defaultCalendar = eventStore.defaultCalendarForNewReminders() {
+            newCalendar.source = defaultCalendar.source
+        } else {
+            newCalendar.source = eventStore.sources.first
+        }
+        
+        do {
+            try eventStore.saveCalendar(newCalendar, commit: true)
+            return newCalendar
+        } catch {
+            print("Failed to create calendar '\(title)': \(error)")
+            return nil
+        }
+    }
+    
+    func createReminder(data: ParsedReminderData, listIdentifier: String? = nil, completion: @escaping (Bool) -> Void) {
         let reminder = EKReminder(eventStore: eventStore)
         reminder.title = data.title
-        reminder.calendar = eventStore.defaultCalendarForNewReminders()
+        
+        if let listId = listIdentifier, let list = eventStore.calendar(withIdentifier: listId) {
+            reminder.calendar = list
+        } else {
+            reminder.calendar = eventStore.defaultCalendarForNewReminders()
+        }
         
         if let url = data.url {
             reminder.url = url // Still set it just in case Apple fixes the UI bug

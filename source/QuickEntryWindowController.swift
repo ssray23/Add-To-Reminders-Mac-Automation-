@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import EventKit
 
 class QuickEntryPanel: NSPanel {
     override var canBecomeKey: Bool { return true }
@@ -8,7 +9,7 @@ class QuickEntryPanel: NSPanel {
 
 class QuickEntryWindowController: NSWindowController, NSWindowDelegate {
     static let shared = QuickEntryWindowController()
-    private var completion: (((title: String, dateText: String, selectedDate: Date?, url: String)?) -> Void)?
+    private var completion: (((title: String, dateText: String, selectedDate: Date?, url: String, listIdentifier: String?)?) -> Void)?
     
     init() {
         let rect = NSRect(x: 0, y: 0, width: 600, height: 210) // Will auto-resize due to SwiftUI
@@ -34,7 +35,7 @@ class QuickEntryWindowController: NSWindowController, NSWindowDelegate {
         fatalError("init(coder:) has not been implemented")
     }
     
-    func show(prompt: String, titlePlaceholder: String = "What do you want to be reminded about?", datePlaceholder: String = "e.g. tomorrow at 7am repeat weekly", initialTitle: String = "", initialDate: String = "", detectedDates: [Date] = [], completion: @escaping ((title: String, dateText: String, selectedDate: Date?, url: String)?) -> Void) {
+    func show(prompt: String, titlePlaceholder: String = "What do you want to be reminded about?", datePlaceholder: String = "e.g. tomorrow at 7am, in 3 hours, repeat weekly", initialTitle: String = "", initialDate: String = "", detectedDates: [Date] = [], completion: @escaping ((title: String, dateText: String, selectedDate: Date?, url: String, listIdentifier: String?)?) -> Void) {
         self.completion = completion
         
         NSApp.setActivationPolicy(.regular)
@@ -74,7 +75,11 @@ struct QuickEntryView: View {
     let detectedDates: [Date]
     @State var selectedDate: Date?
     @State var urlText: String = ""
-    let onComplete: (((title: String, dateText: String, selectedDate: Date?, url: String)?) -> Void)
+    
+    @State var reminderLists: [EKCalendar] = []
+    @State var selectedListIdentifier: String = ""
+    
+    let onComplete: (((title: String, dateText: String, selectedDate: Date?, url: String, listIdentifier: String?)?) -> Void)
     
     enum Field {
         case title
@@ -93,12 +98,11 @@ struct QuickEntryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(prompt)
-                .font(.headline)
+                .fontWeight(.semibold)
                 .foregroundColor(.primary)
             
             TextField(titlePlaceholder, text: $titleText)
                 .textFieldStyle(PlainTextFieldStyle())
-                .font(.system(size: 18))
                 .padding(12)
                 .background(Color(NSColor.textBackgroundColor))
                 .cornerRadius(8)
@@ -108,7 +112,7 @@ struct QuickEntryView: View {
                 )
                 .focused($focusedField, equals: .title)
                 .onSubmit {
-                    onComplete((title: titleText, dateText: dateText, selectedDate: selectedDate, url: urlText))
+                    onComplete((title: titleText, dateText: dateText, selectedDate: selectedDate, url: urlText, listIdentifier: selectedListIdentifier.isEmpty ? nil : selectedListIdentifier))
                 }
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -117,12 +121,12 @@ struct QuickEntryView: View {
                     if let first = detectedDates.first, detectedDates.count > 1 {
                         selectedDate = first
                     }
+                    fetchReminderLists()
                 }
                 
             if detectedDates.count > 1 {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Multiple dates detected. Which one would you like to use?")
-                        .font(.subheadline)
                         .foregroundColor(.secondary)
                     
                     ForEach(detectedDates, id: \.self) { date in
@@ -133,7 +137,6 @@ struct QuickEntryView: View {
                                 Image(systemName: selectedDate == date ? "largecircle.fill.circle" : "circle")
                                     .foregroundColor(selectedDate == date ? .accentColor : .secondary)
                                 Text(dateFormatter.string(from: date))
-                                    .font(.system(size: 14))
                                     .foregroundColor(.primary)
                                 Spacer()
                             }
@@ -151,7 +154,6 @@ struct QuickEntryView: View {
             } else {
                 TextField(datePlaceholder, text: $dateText)
                     .textFieldStyle(PlainTextFieldStyle())
-                    .font(.system(size: 14))
                     .padding(12)
                     .background(Color(NSColor.textBackgroundColor))
                     .cornerRadius(8)
@@ -161,13 +163,12 @@ struct QuickEntryView: View {
                     )
                     .focused($focusedField, equals: .date)
                     .onSubmit {
-                        onComplete((title: titleText, dateText: dateText, selectedDate: nil, url: urlText))
+                        onComplete((title: titleText, dateText: dateText, selectedDate: nil, url: urlText, listIdentifier: selectedListIdentifier.isEmpty ? nil : selectedListIdentifier))
                     }
             }
                 
             TextField("URL (Optional)", text: $urlText)
                 .textFieldStyle(PlainTextFieldStyle())
-                .font(.system(size: 14))
                 .padding(12)
                 .background(Color(NSColor.textBackgroundColor))
                 .cornerRadius(8)
@@ -177,8 +178,31 @@ struct QuickEntryView: View {
                 )
                 .focused($focusedField, equals: .url)
                 .onSubmit {
-                    onComplete((title: titleText, dateText: dateText, selectedDate: selectedDate, url: urlText))
+                    onComplete((title: titleText, dateText: dateText, selectedDate: selectedDate, url: urlText, listIdentifier: selectedListIdentifier.isEmpty ? nil : selectedListIdentifier))
                 }
+            
+            if !reminderLists.isEmpty {
+                HStack(spacing: 12) {
+                    Text("Add to List")
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Picker("", selection: $selectedListIdentifier) {
+                        ForEach(reminderLists, id: \.calendarIdentifier) { list in
+                            Text(list.title)
+                                .tag(list.calendarIdentifier)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .frame(maxWidth: 250)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color(NSColor.textBackgroundColor))
+                .cornerRadius(8)
+            }
             
             HStack {
                 Spacer()
@@ -197,7 +221,7 @@ struct QuickEntryView: View {
                 .keyboardShortcut(.escape, modifiers: [])
                 
                 Button(action: {
-                    onComplete((title: titleText, dateText: dateText, selectedDate: selectedDate, url: urlText))
+                    onComplete((title: titleText, dateText: dateText, selectedDate: selectedDate, url: urlText, listIdentifier: selectedListIdentifier.isEmpty ? nil : selectedListIdentifier))
                 }) {
                     Text("Add")
                         .fontWeight(.medium)
@@ -213,10 +237,29 @@ struct QuickEntryView: View {
                 .opacity(detectedDates.count > 1 && selectedDate == nil ? 0.5 : 1.0)
             }
         }
+        .font(.system(size: 13))
         .padding(24)
         .frame(width: 600)
         .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
         .cornerRadius(12)
+    }
+    
+    private func fetchReminderLists() {
+        RemindersManager.shared.requestAccess { granted in
+            if granted {
+                let lists = RemindersManager.shared.getReminderLists()
+                DispatchQueue.main.async {
+                    self.reminderLists = lists
+                    if let targetList = lists.first(where: { $0.title == "Suddha's Reminders" }) {
+                        self.selectedListIdentifier = targetList.calendarIdentifier
+                    } else if let defaultList = RemindersManager.shared.eventStore.defaultCalendarForNewReminders() {
+                        self.selectedListIdentifier = defaultList.calendarIdentifier
+                    } else if let firstList = lists.first {
+                        self.selectedListIdentifier = firstList.calendarIdentifier
+                    }
+                }
+            }
+        }
     }
 }
 
