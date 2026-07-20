@@ -27,10 +27,28 @@ class RemindersManager {
         }
     }
     
+    static var userFirstName: String {
+        return NSFullUserName().components(separatedBy: " ").first ?? "My"
+    }
+
+    static var targetListNames: [String] {
+        let first = userFirstName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return [
+            first,
+            "\(first)'s reminders",
+            "\(first)’s reminders"
+        ]
+    }
+
     func getReminderLists() -> [EKCalendar] {
         var calendars = eventStore.calendars(for: .reminder)
-        if !calendars.contains(where: { $0.title == "Suddha's Reminders" }) {
-            if let newCal = createReminderList(title: "Suddha's Reminders") {
+        let targets = RemindersManager.targetListNames
+        let hasTargetList = calendars.contains { cal in
+            let title = cal.title.replacingOccurrences(of: "’", with: "'").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return targets.contains(title)
+        }
+        if !hasTargetList {
+            if let newCal = createReminderList(title: RemindersManager.userFirstName) {
                 calendars.append(newCal)
             }
         }

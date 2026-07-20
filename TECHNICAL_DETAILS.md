@@ -16,7 +16,7 @@ The application is written natively in Swift and operates as an `LSUIElement` ba
 
 ### 3. `QuickEntryWindowController.swift` & `DateSelectionWindowController.swift`
 - **Role**: Provides a native, borderless SwiftUI floating window for manual text entry, date prompts, URL injection, and inline multiple date selection (via radio buttons). It combines what used to be two separate windows into a single unified interface, avoiding the blocking event loops of standard `NSAlert` modals.
-- **Features**: Includes a dropdown Picker allowing the user to select the target Reminders list, defaulting to `"Suddha's Reminders"`. Features a unified 13pt system font across all elements for a streamlined and clean macOS control style.
+- **Features**: Includes a dropdown Picker allowing the user to select the target Reminders list, defaulting to a list named after the user's OS first name (e.g., "Suddha") or "Suddha's Reminders" if they already exist, falling back to the default reminders list. Features a unified 13pt system font across all elements for a streamlined and clean macOS control style.
 
 ### 4. `TextParser.swift`
 - **Role**: The natural language processing engine for dates, times, recurrence, and URLs.
@@ -29,7 +29,7 @@ The application is written natively in Swift and operates as an `LSUIElement` ba
 
 ### 5. `RemindersManager.swift`
 - **Role**: Handles persistence and interactions with Apple's `EventKit` framework.
-- **Details**: A singleton wrapper around `EKEventStore`. It asynchronously requests authorization to access Reminders (`EKEventStore.requestFullAccessToReminders`). Once granted, it fetches the available reminder lists. If `"Suddha's Reminders"` is not present, it automatically creates it within the default source. It compiles the list of options for the UI dropdown selector and commits the constructed `EKReminder` directly to the chosen selected reminder calendar list (or falls back to the default calendar list).
+- **Details**: A singleton wrapper around `EKEventStore`. It asynchronously requests authorization to access Reminders (`EKEventStore.requestFullAccessToReminders`). Once granted, it fetches the available reminder lists. If a list matching the user's OS first name (e.g., "Suddha" or "Suddha's Reminders") is not present, it automatically creates it (using the first name, e.g. "Suddha") within the default source. It compiles the list of options for the UI dropdown selector and commits the constructed `EKReminder` directly to the chosen selected reminder calendar list (or falls back to the default calendar list).
 
 ### 6. `HUDWindowController.swift`
 - **Role**: Manages the transient, borderless heads-up display (HUD).

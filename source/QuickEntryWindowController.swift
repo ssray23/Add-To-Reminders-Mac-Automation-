@@ -250,7 +250,10 @@ struct QuickEntryView: View {
                 let lists = RemindersManager.shared.getReminderLists()
                 DispatchQueue.main.async {
                     self.reminderLists = lists
-                    if let targetList = lists.first(where: { $0.title == "Suddha's Reminders" }) {
+                    let firstName = RemindersManager.userFirstName.lowercased()
+                    let targets = RemindersManager.targetListNames
+                    if let targetList = lists.first(where: { $0.title.lowercased() == firstName }) ??
+                                       lists.first(where: { targets.contains($0.title.replacingOccurrences(of: "’", with: "'").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) }) {
                         self.selectedListIdentifier = targetList.calendarIdentifier
                     } else if let defaultList = RemindersManager.shared.eventStore.defaultCalendarForNewReminders() {
                         self.selectedListIdentifier = defaultList.calendarIdentifier
