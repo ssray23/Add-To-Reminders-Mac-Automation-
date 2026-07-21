@@ -95,6 +95,25 @@ struct QuickEntryView: View {
         return df
     }()
     
+    private var parsedDateFeedback: String? {
+        let trimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return nil
+        }
+        let parsed = TextParser.parse(text: trimmed)
+        if let date = parsed.date {
+            return "Will set due date: " + dateFormatter.string(from: date)
+        } else {
+            return "⚠️ No date/time recognized (reminder will have no date)"
+        }
+    }
+    
+    private var dateTextHasValidDate: Bool {
+        let trimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return false }
+        return TextParser.parse(text: trimmed).date != nil
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(prompt)
@@ -152,19 +171,28 @@ struct QuickEntryView: View {
                     }
                 }
             } else {
-                TextField(datePlaceholder, text: $dateText)
-                    .textFieldStyle(PlainTextFieldStyle())
-                    .padding(12)
-                    .background(Color(NSColor.textBackgroundColor))
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.accentColor.opacity(focusedField == .date ? 1.0 : 0.0), lineWidth: 2)
-                    )
-                    .focused($focusedField, equals: .date)
-                    .onSubmit {
-                        onComplete((title: titleText, dateText: dateText, selectedDate: nil, url: urlText, listIdentifier: selectedListIdentifier.isEmpty ? nil : selectedListIdentifier))
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField(datePlaceholder, text: $dateText)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .padding(12)
+                        .background(Color(NSColor.textBackgroundColor))
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.accentColor.opacity(focusedField == .date ? 1.0 : 0.0), lineWidth: 2)
+                        )
+                        .focused($focusedField, equals: .date)
+                        .onSubmit {
+                            onComplete((title: titleText, dateText: dateText, selectedDate: nil, url: urlText, listIdentifier: selectedListIdentifier.isEmpty ? nil : selectedListIdentifier))
+                        }
+                    
+                    if let feedback = parsedDateFeedback {
+                        Text(feedback)
+                            .font(.system(size: 11))
+                            .foregroundColor(dateTextHasValidDate ? .secondary : .orange)
+                            .padding(.horizontal, 4)
                     }
+                }
             }
                 
             TextField("URL (Optional)", text: $urlText)
@@ -196,7 +224,7 @@ struct QuickEntryView: View {
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
-                    .frame(maxWidth: 250)
+                    .frame(maxWidth: 250, alignment: .trailing)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)

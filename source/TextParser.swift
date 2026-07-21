@@ -215,9 +215,11 @@ class TextParser {
             // --- TOMORROW ---
             "tmrw": "tomorrow",
             "tmw": "tomorrow",
+            "tmr": "tomorrow",
             "tmmw": "tomorrow",
             "tmo": "tomorrow",
             "tommow": "tomorrow",
+            "tommorow": "tomorrow",
             "tommroow": "tomorrow",
             "tommorrow": "tomorrow",
             "tommrow": "tomorrow",
@@ -423,7 +425,13 @@ class TextParser {
                 
                 if (hasDateParts && currentHasDate) || (hasTimeParts && currentHasTime) {
                     // This is a separate date, let's flush current
-                    if currentHasDate {
+                    if currentHasDate || currentHasTime {
+                        if !currentHasDate {
+                            let todayComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+                            currentMergedComponents.year = todayComps.year
+                            currentMergedComponents.month = todayComps.month
+                            currentMergedComponents.day = todayComps.day
+                        }
                         if currentMergedComponents.hour == nil {
                             currentMergedComponents.hour = 7
                             currentMergedComponents.minute = 0
@@ -449,7 +457,15 @@ class TextParser {
             }
             
             // Flush the last one
-            if currentMergedComponents.year != nil || currentMergedComponents.month != nil || currentMergedComponents.day != nil {
+            let currentHasDate = currentMergedComponents.year != nil || currentMergedComponents.month != nil || currentMergedComponents.day != nil
+            let currentHasTime = currentMergedComponents.hour != nil || currentMergedComponents.minute != nil
+            if currentHasDate || currentHasTime {
+                if !currentHasDate {
+                    let todayComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+                    currentMergedComponents.year = todayComps.year
+                    currentMergedComponents.month = todayComps.month
+                    currentMergedComponents.day = todayComps.day
+                }
                 if currentMergedComponents.hour == nil {
                     currentMergedComponents.hour = 7
                     currentMergedComponents.minute = 0

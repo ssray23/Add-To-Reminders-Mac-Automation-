@@ -45,7 +45,6 @@ struct AnimationView: View {
             VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         )
-        .shadow(radius: 10)
         .onAppear {
             appear = true
         }
