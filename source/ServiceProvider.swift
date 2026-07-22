@@ -141,7 +141,8 @@ import EventKit
         var startDate = selectedDate
         var recRule = parsedData.recurrence ?? originalParsedData?.recurrence
         
-        if !Calendar.current.isDateInToday(selectedDate) {
+        let hasExplicitRecurrence = (parsedData.recurrence != nil || originalParsedData?.recurrence != nil)
+        if hasExplicitRecurrence && !Calendar.current.isDateInToday(selectedDate) {
             recRule = EKRecurrenceRule(recurrenceWith: .daily, interval: 1, daysOfTheWeek: nil, daysOfTheMonth: nil, monthsOfTheYear: nil, weeksOfTheYear: nil, daysOfTheYear: nil, setPositions: nil, end: EKRecurrenceEnd(end: TextParser.endOfDay(for: selectedDate)))
             var startComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
             startComps.hour = 7

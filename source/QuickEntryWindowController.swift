@@ -192,7 +192,7 @@ struct QuickEntryView: View {
         let parsed = TextParser.parse(text: combined)
         
         let formattedDate = dateFormatter.string(from: date)
-        if parsed.recurrence != nil || !Calendar.current.isDateInToday(date) {
+        if parsed.recurrence != nil {
             return "\(formattedDate) (Repeats daily)"
         }
         return formattedDate
@@ -200,18 +200,26 @@ struct QuickEntryView: View {
     
     private var parsedDateFeedback: String? {
         let dateTrimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let titleTrimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let combined = (titleTrimmed + " " + dateTrimmed).trimmingCharacters(in: .whitespacesAndNewlines)
+        let parsedCombined = TextParser.parse(text: combined)
         
         if dynamicDetectedDates.count > 1, let selDate = effectiveSelectedDate {
-            let dfOnly = DateFormatter()
-            dfOnly.dateStyle = .medium
-            dfOnly.timeStyle = .none
-            var startComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-            startComps.hour = 7
-            startComps.minute = 0
-            startComps.second = 0
-            let startDate = Calendar.current.date(from: startComps) ?? Date()
-            let startString = dateFormatter.string(from: startDate)
-            return "Will set due date: \(startString) (Repeats daily until \(dfOnly.string(from: selDate)))"
+            if parsedCombined.recurrence != nil {
+                let dfOnly = DateFormatter()
+                dfOnly.dateStyle = .medium
+                dfOnly.timeStyle = .none
+                var startComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+                startComps.hour = 7
+                startComps.minute = 0
+                startComps.second = 0
+                let startDate = Calendar.current.date(from: startComps) ?? Date()
+                let startString = dateFormatter.string(from: startDate)
+                return "Will set due date: \(startString) (Repeats daily until \(dfOnly.string(from: selDate)))"
+            } else {
+                let selString = dateFormatter.string(from: selDate)
+                return "Will set due date: \(selString)"
+            }
         }
         
         guard let parsed = activeParsedData else { return nil }
