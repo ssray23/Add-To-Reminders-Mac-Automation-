@@ -381,7 +381,7 @@ struct QuickEntryView: View {
                 
                 Button(action: {
                     autoSeparateDateFromTitleIfNeeded()
-                    onComplete((title: titleText, dateText: dateText, selectedDate: selectedDate, url: urlText, listIdentifier: selectedListIdentifier.isEmpty ? nil : selectedListIdentifier))
+                    onComplete((title: titleText, dateText: dateText, selectedDate: effectiveSelectedDate, url: urlText, listIdentifier: selectedListIdentifier.isEmpty ? nil : selectedListIdentifier))
                 }) {
                     Text("Add")
                         .fontWeight(.medium)
@@ -393,8 +393,8 @@ struct QuickEntryView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
                 .keyboardShortcut(.return, modifiers: [])
-                .disabled(detectedDates.count > 1 && selectedDate == nil)
-                .opacity(detectedDates.count > 1 && selectedDate == nil ? 0.5 : 1.0)
+                .disabled(dynamicDetectedDates.count > 1 && effectiveSelectedDate == nil)
+                .opacity(dynamicDetectedDates.count > 1 && effectiveSelectedDate == nil ? 0.5 : 1.0)
             }
         }
         .font(.system(size: 13))
