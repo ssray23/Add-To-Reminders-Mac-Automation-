@@ -175,6 +175,13 @@ struct QuickEntryView: View {
         return detectedDates
     }
     
+    private var effectiveSelectedDate: Date? {
+        if let s = selectedDate, dynamicDetectedDates.contains(where: { isSameDate(s, $0) }) {
+            return s
+        }
+        return dynamicDetectedDates.first
+    }
+    
     private func isSameDate(_ d1: Date?, _ d2: Date) -> Bool {
         guard let d1 = d1 else { return false }
         return abs(d1.timeIntervalSince(d2)) < 1.0
@@ -226,7 +233,7 @@ struct QuickEntryView: View {
                 }
                 .onSubmit {
                     autoSeparateDateFromTitleIfNeeded()
-                    onComplete((title: titleText, dateText: dateText, selectedDate: selectedDate, url: urlText, listIdentifier: selectedListIdentifier.isEmpty ? nil : selectedListIdentifier))
+                    onComplete((title: titleText, dateText: dateText, selectedDate: effectiveSelectedDate, url: urlText, listIdentifier: selectedListIdentifier.isEmpty ? nil : selectedListIdentifier))
                 }
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -234,9 +241,7 @@ struct QuickEntryView: View {
                     }
                     autoSeparateDateFromTitleIfNeeded()
                     if let first = dynamicDetectedDates.first, dynamicDetectedDates.count > 1 {
-                        if selectedDate == nil || !dynamicDetectedDates.contains(where: { isSameDate(selectedDate, $0) }) {
-                            selectedDate = first
-                        }
+                        selectedDate = first
                     }
                     fetchReminderLists()
                 }
@@ -247,25 +252,24 @@ struct QuickEntryView: View {
                         .foregroundColor(.secondary)
                     
                     ForEach(dynamicDetectedDates, id: \.self) { date in
-                        Button(action: {
-                            selectedDate = date
-                        }) {
-                            HStack {
-                                Image(systemName: isSameDate(selectedDate, date) ? "largecircle.fill.circle" : "circle")
-                                    .foregroundColor(isSameDate(selectedDate, date) ? .accentColor : .secondary)
-                                Text(dateFormatter.string(from: date))
-                                    .foregroundColor(.primary)
-                                Spacer()
-                            }
-                            .padding(8)
-                            .background(Color(NSColor.textBackgroundColor).opacity(isSameDate(selectedDate, date) ? 1.0 : 0.6))
-                            .cornerRadius(8)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.accentColor.opacity(isSameDate(selectedDate, date) ? 1.0 : 0.0), lineWidth: 2)
-                            )
+                        HStack {
+                            Image(systemName: isSameDate(effectiveSelectedDate, date) ? "largecircle.fill.circle" : "circle")
+                                .foregroundColor(isSameDate(effectiveSelectedDate, date) ? .accentColor : .secondary)
+                            Text(dateFormatter.string(from: date))
+                                .foregroundColor(.primary)
+                            Spacer()
                         }
-                        .buttonStyle(PlainButtonStyle())
+                        .padding(8)
+                        .background(Color(NSColor.textBackgroundColor).opacity(isSameDate(effectiveSelectedDate, date) ? 1.0 : 0.6))
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.accentColor.opacity(isSameDate(effectiveSelectedDate, date) ? 1.0 : 0.0), lineWidth: 2)
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedDate = date
+                        }
                     }
                 }
             } else {
