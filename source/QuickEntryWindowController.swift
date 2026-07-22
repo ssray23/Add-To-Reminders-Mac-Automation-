@@ -120,16 +120,16 @@ struct QuickEntryView: View {
         return TextParser.parse(text: combined)
     }
     
-    private var parsedDateFeedback: String? {
-        let dateTrimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let parsed = activeParsedData else { return nil }
-        
-        if let feedback = TextParser.formatParsedDateFeedback(parsed) {
-            return "Will set due date: " + feedback
-        } else if !dateTrimmed.isEmpty {
-            return "⚠️ No date/time recognized (reminder will have no date)"
-        } else {
-            return nil
+    private func updateDateTextFromTitleLive() {
+        guard focusedField != .date else { return }
+        let titleTrimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !titleTrimmed.isEmpty {
+            let parsed = TextParser.parse(text: titleTrimmed)
+            if parsed.date != nil || parsed.recurrence != nil {
+                if let feedback = TextParser.formatParsedDateFeedback(parsed) {
+                    self.dateText = feedback
+                }
+            }
         }
     }
     
@@ -186,22 +186,42 @@ struct QuickEntryView: View {
     }
     
     private func formatDateOptionLabel(_ date: Date) -> String {
-        let df = DateFormatter()
-        df.dateStyle = .medium
-        df.timeStyle = .short
-        return df.string(from: date)
+        let titleTrimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let dateTrimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let combined = (titleTrimmed + " " + dateTrimmed).trimmingCharacters(in: .whitespacesAndNewlines)
+        let parsed = TextParser.parse(text: combined)
+        
+        let formattedDate = dateFormatter.string(from: date)
+        if parsed.recurrence != nil || !Calendar.current.isDateInToday(date) {
+            return "\(formattedDate) (Repeats daily)"
+        }
+        return formattedDate
     }
     
-    private func updateDateTextFromTitleLive() {
-        guard focusedField != .date else { return }
-        let titleTrimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !titleTrimmed.isEmpty {
-            let parsed = TextParser.parse(text: titleTrimmed)
-            if parsed.date != nil || parsed.recurrence != nil {
-                if let feedback = TextParser.formatParsedDateFeedback(parsed) {
-                    self.dateText = feedback
-                }
-            }
+    private var parsedDateFeedback: String? {
+        let dateTrimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if dynamicDetectedDates.count > 1, let selDate = effectiveSelectedDate {
+            let dfOnly = DateFormatter()
+            dfOnly.dateStyle = .medium
+            dfOnly.timeStyle = .none
+            var startComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+            startComps.hour = 7
+            startComps.minute = 0
+            startComps.second = 0
+            let startDate = Calendar.current.date(from: startComps) ?? Date()
+            let startString = dateFormatter.string(from: startDate)
+            return "Will set due date: \(startString) (Repeats daily until \(dfOnly.string(from: selDate)))"
+        }
+        
+        guard let parsed = activeParsedData else { return nil }
+        
+        if let feedback = TextParser.formatParsedDateFeedback(parsed) {
+            return "Will set due date: " + feedback
+        } else if !dateTrimmed.isEmpty {
+            return "⚠️ No date/time recognized (reminder will have no date)"
+        } else {
+            return nil
         }
     }
     
@@ -257,7 +277,7 @@ struct QuickEntryView: View {
                             HStack {
                                 Image(systemName: selectedIndex == index ? "largecircle.fill.circle" : "circle")
                                     .foregroundColor(selectedIndex == index ? .accentColor : .secondary)
-                                Text(dateFormatter.string(from: date))
+                                Text(formatDateOptionLabel(date))
                                     .foregroundColor(.primary)
                                 Spacer()
                             }
@@ -270,6 +290,13 @@ struct QuickEntryView: View {
                             )
                         }
                         .buttonStyle(PlainButtonStyle())
+                    }
+                    
+                    if let feedback = parsedDateFeedback {
+                        Text(feedback)
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 4)
                     }
                 }
             } else {
