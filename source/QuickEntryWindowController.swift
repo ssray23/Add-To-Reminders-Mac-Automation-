@@ -196,6 +196,19 @@ struct QuickEntryView: View {
         return df.string(from: date)
     }
     
+    private func updateDateTextFromTitleLive() {
+        guard focusedField != .date else { return }
+        let titleTrimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !titleTrimmed.isEmpty {
+            let parsed = TextParser.parse(text: titleTrimmed)
+            if parsed.date != nil || parsed.recurrence != nil {
+                if let feedback = TextParser.formatParsedDateFeedback(parsed) {
+                    self.dateText = feedback
+                }
+            }
+        }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(prompt)
@@ -212,6 +225,9 @@ struct QuickEntryView: View {
                         .stroke(Color.accentColor.opacity(focusedField == .title ? 1.0 : 0.0), lineWidth: 2)
                 )
                 .focused($focusedField, equals: .title)
+                .onChange(of: titleText) { _ in
+                    updateDateTextFromTitleLive()
+                }
                 .onChange(of: focusedField) { newFocus in
                     if newFocus != .title {
                         autoSeparateDateFromTitleIfNeeded()
