@@ -39,7 +39,7 @@ import EventKit
                 var parsedData = TextParser.parse(text: combinedText)
                 
                 if let selectedDate = resultTuple.selectedDate {
-                    parsedData = ParsedReminderData(title: parsedData.title, date: selectedDate, allDetectedDates: parsedData.allDetectedDates, url: parsedData.url, recurrence: parsedData.recurrence)
+                    parsedData = self.applySelectedDate(selectedDate: selectedDate, to: parsedData, originalParsedData: nil)
                 }
                 
                 self.logDebug("showQuickEntry: parsed text, url is \(String(describing: parsedData.url))")
@@ -93,21 +93,7 @@ import EventKit
                 var newParsedData = TextParser.parse(text: combinedText)
                 
                 if let selectedDate = resultTuple.selectedDate {
-                    var startDate = selectedDate
-                    var recRule = newParsedData.recurrence
-                    
-                    if !Calendar.current.isDateInToday(selectedDate) {
-                        recRule = EKRecurrenceRule(recurrenceWith: .daily, interval: 1, daysOfTheWeek: nil, daysOfTheMonth: nil, monthsOfTheYear: nil, weeksOfTheYear: nil, daysOfTheYear: nil, setPositions: nil, end: EKRecurrenceEnd(end: TextParser.endOfDay(for: selectedDate)))
-                        var startComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-                        startComps.hour = 7
-                        startComps.minute = 0
-                        startComps.second = 0
-                        if let s = Calendar.current.date(from: startComps) {
-                            startDate = s
-                        }
-                    }
-                    
-                    newParsedData = ParsedReminderData(title: newParsedData.title, date: startDate, allDetectedDates: newParsedData.allDetectedDates, url: newParsedData.url, recurrence: recRule)
+                    newParsedData = self.applySelectedDate(selectedDate: selectedDate, to: newParsedData, originalParsedData: parsedData)
                 }
                 
                 // Preserve URL from original parse if not modified, or from UI
@@ -149,6 +135,24 @@ import EventKit
                 self.proceedWithSaving(parsedData: finalData, listIdentifier: listIdentifier)
             }
         }
+    }
+    
+    private func applySelectedDate(selectedDate: Date, to parsedData: ParsedReminderData, originalParsedData: ParsedReminderData?) -> ParsedReminderData {
+        var startDate = selectedDate
+        var recRule = parsedData.recurrence ?? originalParsedData?.recurrence
+        
+        if !Calendar.current.isDateInToday(selectedDate) {
+            recRule = EKRecurrenceRule(recurrenceWith: .daily, interval: 1, daysOfTheWeek: nil, daysOfTheMonth: nil, monthsOfTheYear: nil, weeksOfTheYear: nil, daysOfTheYear: nil, setPositions: nil, end: EKRecurrenceEnd(end: TextParser.endOfDay(for: selectedDate)))
+            var startComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+            startComps.hour = 7
+            startComps.minute = 0
+            startComps.second = 0
+            if let s = Calendar.current.date(from: startComps) {
+                startDate = s
+            }
+        }
+        
+        return ParsedReminderData(title: parsedData.title, date: startDate, allDetectedDates: parsedData.allDetectedDates, url: parsedData.url, recurrence: recRule, datePhrase: parsedData.datePhrase)
     }
     
     private func proceedWithSaving(parsedData: ParsedReminderData, listIdentifier: String? = nil) {

@@ -327,6 +327,13 @@ class TextParser {
         return nil
     }
 
+    private static func hasExplicitTimeInText(_ text: String) -> Bool {
+        let pattern = "(?i)\\b(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)|noon|midnight|\\d{1,2}:\\d{2})\\b"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return false }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.firstMatch(in: text, options: [], range: range) != nil
+    }
+    
     static func parse(text: String) -> ParsedReminderData {
         var allDetectedDates: [Date] = []
         var extractedDate: Date? = nil
@@ -666,18 +673,40 @@ class TextParser {
             finalTitle = "New Reminder"
         }
         
-        var uniqueDates: [Date] = []
+        var normalizedDates: [Date] = []
+        let explicitTimePresent = hasExplicitTimeInText(text)
+        
         for d in allDetectedDates {
-            if !uniqueDates.contains(where: { abs($0.timeIntervalSince(d)) < 60 }) {
-                uniqueDates.append(d)
+            var norm = d
+            if !explicitTimePresent {
+                var comps = Calendar.current.dateComponents([.year, .month, .day], from: d)
+                comps.hour = 7
+                comps.minute = 0
+                comps.second = 0
+                if let c = Calendar.current.date(from: comps) {
+                    norm = c
+                }
+            }
+            if !normalizedDates.contains(where: { abs($0.timeIntervalSince(norm)) < 60 }) {
+                normalizedDates.append(norm)
             }
         }
         for d in allRecurrenceDates {
-            if !uniqueDates.contains(where: { Calendar.current.isDate($0, inSameDayAs: d) || abs($0.timeIntervalSince(d)) < 60 }) {
-                uniqueDates.append(d)
+            var norm = d
+            if !explicitTimePresent {
+                var comps = Calendar.current.dateComponents([.year, .month, .day], from: d)
+                comps.hour = 7
+                comps.minute = 0
+                comps.second = 0
+                if let c = Calendar.current.date(from: comps) {
+                    norm = c
+                }
+            }
+            if !normalizedDates.contains(where: { Calendar.current.isDate($0, inSameDayAs: norm) || abs($0.timeIntervalSince(norm)) < 60 }) {
+                normalizedDates.append(norm)
             }
         }
-        allDetectedDates = uniqueDates
+        allDetectedDates = normalizedDates
         
         if !allDetectedDates.isEmpty {
             extractedDate = allDetectedDates.first
