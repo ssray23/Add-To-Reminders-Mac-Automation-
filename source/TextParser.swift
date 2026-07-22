@@ -7,6 +7,16 @@ struct ParsedReminderData {
     let allDetectedDates: [Date]
     let url: URL?
     let recurrence: EKRecurrenceRule?
+    let datePhrase: String?
+    
+    init(title: String, date: Date?, allDetectedDates: [Date], url: URL?, recurrence: EKRecurrenceRule?, datePhrase: String? = nil) {
+        self.title = title
+        self.date = date
+        self.allDetectedDates = allDetectedDates
+        self.url = url
+        self.recurrence = recurrence
+        self.datePhrase = datePhrase
+    }
 }
 
 class TextParser {
@@ -18,7 +28,47 @@ class TextParser {
         return Calendar.current.date(from: components) ?? date
     }
 
-    static func extractRecurrence(text: inout String) -> EKRecurrenceRule? {
+    static func formatParsedDateFeedback(_ parsed: ParsedReminderData) -> String? {
+        guard let date = parsed.date else { return nil }
+        
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.timeStyle = .short
+        
+        let dfOnly = DateFormatter()
+        dfOnly.dateStyle = .medium
+        dfOnly.timeStyle = .none
+        
+        var msg = df.string(from: date)
+        if let rec = parsed.recurrence {
+            if let end = rec.recurrenceEnd?.endDate {
+                msg += " (Repeats daily until " + dfOnly.string(from: end) + ")"
+            } else {
+                msg += " (Repeats daily)"
+            }
+        }
+        return msg
+    }
+
+    static func extractDatePhrase(original: String, cleanTitle: String) -> String {
+        let parsed = TextParser.parse(text: original)
+        if let phrase = parsed.datePhrase, !phrase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            var cleaned = phrase.replacingOccurrences(of: "^[\\s,.:;\\-–—]+", with: "", options: .regularExpression)
+            cleaned = cleaned.replacingOccurrences(of: "[\\s,.:;\\-–—]+$", with: "", options: .regularExpression)
+            cleaned = cleaned.replacingOccurrences(of: "^(?i)(on|at|due|by|in)\\s+", with: "", options: .regularExpression)
+            return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        var remainder = original
+        if let range = remainder.range(of: cleanTitle) {
+            remainder.removeSubrange(range)
+        }
+        remainder = remainder.replacingOccurrences(of: "^[\\s,.:;\\-–—]+", with: "", options: .regularExpression)
+        remainder = remainder.replacingOccurrences(of: "[\\s,.:;\\-–—]+$", with: "", options: .regularExpression)
+        remainder = remainder.replacingOccurrences(of: "^(?i)(on|at|due|by|in)\\s+", with: "", options: .regularExpression)
+        return remainder.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func extractRecurrence(text: inout String, extractedRecurrenceStartDate: inout Date?, extractedDatePhrase: inout String?, allRecurrenceDates: inout [Date]) -> EKRecurrenceRule? {
         var matchedFrequency: EKRecurrenceFrequency?
         var matchedInterval: Int = 1
         var matchRangeToRemove: Range<String.Index>?
@@ -88,35 +138,124 @@ class TextParser {
             }
         }
         
+        var recurrenceEnd: EKRecurrenceEnd? = nil
+        
+        // If still no frequency, check for standalone until / till / up untill / for X days patterns
+        if matchedFrequency == nil {
+            let untilPattern = "(?i)\\b(up\\s+un?till?|up\\s+to|until|un\\s+till|till|til|through|thru|ending\\s+on|ends\\s+on|expires\\s+on|expires|valid\\s+(?:till|until|through))\\b\\s+(.+)$"
+            if let regex = try? NSRegularExpression(pattern: untilPattern, options: []) {
+                let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+                if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+                   let dateRange = Range(match.range(at: 2), in: text) {
+                    
+                    let dateStr = String(text[dateRange])
+                    var foundDate: Date? = nil
+                    var foundNSRange: NSRange? = nil
+                    
+                    if let rel = extractRelativeDate(text: dateStr) {
+                        foundDate = rel.0
+                        foundNSRange = rel.1
+                    } else if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue),
+                              let dateMatch = detector.firstMatch(in: dateStr, options: [], range: NSRange(location: 0, length: dateStr.utf16.count)),
+                              let parsedDate = dateMatch.date {
+                        foundDate = parsedDate
+                        foundNSRange = dateMatch.range
+                    }
+                    
+                    if let targetDate = foundDate {
+                        allRecurrenceDates.append(targetDate)
+                        matchedFrequency = .daily
+                        matchedInterval = 1
+                        recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: targetDate))
+                        
+                        let matchedSubtext = foundNSRange != nil ? String(dateStr[Range(foundNSRange!, in: dateStr)!]) : dateStr
+                        let hasExplicitTime = matchedSubtext.range(of: "(?i)(\\b\\d{1,2}(?::\\d{2})?\\s*(?:am|pm|a\\.m\\.|p\\.m\\.)\\b|\\b\\d{1,2}:\\d{2}\\b|\\bat\\s+\\d+|\\bnoon\\b|\\bmidnight\\b)", options: .regularExpression) != nil
+                        
+                        if hasExplicitTime {
+                            let targetComps = Calendar.current.dateComponents([.hour, .minute, .second], from: targetDate)
+                            var startComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+                            startComps.hour = targetComps.hour
+                            startComps.minute = targetComps.minute
+                            startComps.second = targetComps.second
+                            extractedRecurrenceStartDate = Calendar.current.date(from: startComps)
+                        }
+                        
+                        let dateLength = foundNSRange?.length ?? dateStr.utf16.count
+                        let totalLength = (dateRange.lowerBound.utf16Offset(in: text) + dateLength) - match.range.lowerBound
+                        let removeNSRange = NSRange(location: match.range.lowerBound, length: totalLength)
+                        if let removeRange = Range(removeNSRange, in: text) {
+                            matchRangeToRemove = removeRange
+                        }
+                    }
+                }
+            }
+            
+            if matchedFrequency == nil {
+                let forDaysPattern = "(?i)\\bfor\\s+(?:the\\s+next\\s+)?(\\d+)\\s+days?(?:\\s+from\\s+today)?\\b"
+                if let regex = try? NSRegularExpression(pattern: forDaysPattern, options: []) {
+                    let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+                    if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+                       let numRange = Range(match.range(at: 1), in: text) {
+                        let numDays = Int(String(text[numRange])) ?? 1
+                        if let targetDate = Calendar.current.date(byAdding: .day, value: numDays, to: Date()) {
+                            allRecurrenceDates.append(targetDate)
+                            matchedFrequency = .daily
+                            matchedInterval = 1
+                            recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: targetDate))
+                            if let range = Range(match.range, in: text) {
+                                matchRangeToRemove = range
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         guard let freq = matchedFrequency, let removeRange = matchRangeToRemove else {
             return nil
         }
         
         text.removeSubrange(removeRange)
         
-        var recurrenceEnd: EKRecurrenceEnd? = nil
-        let untilRegex = try? NSRegularExpression(pattern: "(?i)\\b(until|ending\\s+on|ends\\s+on|for\\s*(?:the\\s*)?next)\\b", options: [])
-        if let untilRegex = untilRegex,
-           let untilMatch = untilRegex.firstMatch(in: text, options: [], range: NSRange(text.startIndex..<text.endIndex, in: text)) {
-            
-            let substringRange = NSRange(location: untilMatch.range.upperBound, length: text.utf16.count - untilMatch.range.upperBound)
-            
-            if let relativeData = extractRelativeDate(text: text, searchRange: substringRange) {
-                recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: relativeData.0))
-                
-                let removeNSRange = NSRange(location: untilMatch.range.lowerBound, length: relativeData.1.upperBound - untilMatch.range.lowerBound)
-                if let removeRange = Range(removeNSRange, in: text) {
-                    text.removeSubrange(removeRange)
+        let secondaryForDaysPattern = "(?i)\\bfor\\s+(?:the\\s+next\\s+)?(\\d+)\\s+days?(?:\\s+from\\s+today)?\\b"
+        if let regex = try? NSRegularExpression(pattern: secondaryForDaysPattern, options: []) {
+            let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+            if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+               let numRange = Range(match.range(at: 1), in: text) {
+                let numDays = Int(String(text[numRange])) ?? 1
+                if let secDate = Calendar.current.date(byAdding: .day, value: numDays, to: Date()) {
+                    allRecurrenceDates.append(secDate)
                 }
-            } else if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue),
-               let dateMatch = detector.firstMatch(in: text, options: [], range: substringRange),
-               let parsedDate = dateMatch.date {
+            }
+        }
+        
+        let secondaryForDays = "(?i)\\s*[-–—]?\\s*(?:and\\s+it[’']s\\s+sticking\\s+around\\s+)?for\\s+(?:the\\s+next\\s+)?\\d+\\s+days?(?:\\s+from\\s+today)?\\.?"
+        text = text.replacingOccurrences(of: secondaryForDays, with: "", options: .regularExpression)
+        
+        if recurrenceEnd == nil {
+            let untilRegex = try? NSRegularExpression(pattern: "(?i)\\b(until|un\\s+till|up\\s+un?till?|ending\\s+on|ends\\s+on|expires\\s+on|expires|valid\\s+(?:till|until)|for\\s*(?:the\\s*)?next)\\b", options: [])
+            if let untilRegex = untilRegex,
+               let untilMatch = untilRegex.firstMatch(in: text, options: [], range: NSRange(text.startIndex..<text.endIndex, in: text)) {
                 
-                recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: parsedDate))
+                let substringRange = NSRange(location: untilMatch.range.upperBound, length: text.utf16.count - untilMatch.range.upperBound)
                 
-                let removeNSRange = NSRange(location: untilMatch.range.lowerBound, length: dateMatch.range.upperBound - untilMatch.range.lowerBound)
-                if let removeRange = Range(removeNSRange, in: text) {
-                    text.removeSubrange(removeRange)
+                if let relativeData = extractRelativeDate(text: text, searchRange: substringRange) {
+                    recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: relativeData.0))
+                    
+                    let removeNSRange = NSRange(location: untilMatch.range.lowerBound, length: relativeData.1.upperBound - untilMatch.range.lowerBound)
+                    if let removeRange = Range(removeNSRange, in: text) {
+                        text.removeSubrange(removeRange)
+                    }
+                } else if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue),
+                   let dateMatch = detector.firstMatch(in: text, options: [], range: substringRange),
+                   let parsedDate = dateMatch.date {
+                    
+                    recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: parsedDate))
+                    
+                    let removeNSRange = NSRange(location: untilMatch.range.lowerBound, length: dateMatch.range.upperBound - untilMatch.range.lowerBound)
+                    if let removeRange = Range(removeNSRange, in: text) {
+                        text.removeSubrange(removeRange)
+                    }
                 }
             }
         }
@@ -193,9 +332,13 @@ class TextParser {
         var extractedDate: Date? = nil
         var extractedURL: URL? = nil
         
+        // Strip invisible formatting characters (soft hyphens, zero-width spaces/joiners, BOM)
+        var sanitizedText = text.replacingOccurrences(of: "[\u{00AD}\u{200B}\u{200C}\u{200D}\u{2060}\u{FEFF}\u{FFFC}]", with: "", options: .regularExpression)
+        sanitizedText = sanitizedText.replacingOccurrences(of: "[\u{00A0}\u{202F}\u{2007}]", with: " ", options: .regularExpression)
+        
         // Normalize whitespace (tabs, newlines, multiple spaces) to a single space
         // because NSDataDetector often fails to recognize dates separated by them.
-        var cleanOriginalText = text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
+        var cleanOriginalText = sanitizedText.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
         
         // Pre-process specifically for the date detector to handle common typos
         let typoFixes = [
@@ -329,10 +472,13 @@ class TextParser {
             cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\\b\(word)\\b", with: number, options: [.regularExpression, .caseInsensitive])
         }
         
-        let recurrenceRule = extractRecurrence(text: &cleanOriginalText)
+        var extractedRecurrenceStartDate: Date? = nil
+        var extractedDatePhrase: String? = nil
+        var allRecurrenceDates: [Date] = []
+        let recurrenceRule = extractRecurrence(text: &cleanOriginalText, extractedRecurrenceStartDate: &extractedRecurrenceStartDate, extractedDatePhrase: &extractedDatePhrase, allRecurrenceDates: &allRecurrenceDates)
         
         // Hide tricky words with a zero-width space to prevent NSDataDetector from incorrectly interpreting them as durations starting today
-        let trickyWords = ["due", "before", "by", "until"]
+        let trickyWords = ["due", "before", "by", "until", "till", "til", "through", "thru"]
         for word in trickyWords {
             let prefix = String(word.prefix(1))
             let suffix = String(word.dropFirst())
@@ -499,12 +645,13 @@ class TextParser {
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\\(\\s*\\)", with: "", options: .regularExpression)
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\\[\\s*\\]", with: "", options: .regularExpression)
         
-        // Remove trailing punctuation like colons, dashes, commas
-        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "[:\\-,\\s]+$", with: "", options: .regularExpression)
+        // Remove trailing punctuation like periods, colons, dashes, commas
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "[\\.:\\-,\\s]+$", with: "", options: .regularExpression)
         
         // Sanitize the original text to be the title
         let components = cleanOriginalText.components(separatedBy: .whitespacesAndNewlines)
         var finalTitle = components.filter { !$0.isEmpty }.joined(separator: " ")
+        finalTitle = finalTitle.replacingOccurrences(of: "[\\.:\\-,\\s]+$", with: "", options: .regularExpression)
         
         // Remove leading punctuation like commas or dashes if they are somehow present,
         // though trimming whitespaces above is usually enough. 
@@ -512,10 +659,30 @@ class TextParser {
             finalTitle = "New Reminder"
         }
         
-        if !allDetectedDates.isEmpty {
-            extractedDate = allDetectedDates.first
+        for d in allRecurrenceDates {
+            if !allDetectedDates.contains(where: { Calendar.current.isDate($0, inSameDayAs: d) }) {
+                allDetectedDates.append(d)
+            }
         }
         
-        return ParsedReminderData(title: finalTitle, date: extractedDate, allDetectedDates: allDetectedDates, url: extractedURL, recurrence: recurrenceRule)
+        if !allDetectedDates.isEmpty {
+            extractedDate = allDetectedDates.first
+        } else if recurrenceRule != nil {
+            if let recStart = extractedRecurrenceStartDate {
+                extractedDate = recStart
+                allDetectedDates = [recStart]
+            } else {
+                var comps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+                comps.hour = 7
+                comps.minute = 0
+                comps.second = 0
+                if let defaultStart = Calendar.current.date(from: comps) {
+                    extractedDate = defaultStart
+                    allDetectedDates = [defaultStart]
+                }
+            }
+        }
+        
+        return ParsedReminderData(title: finalTitle, date: extractedDate, allDetectedDates: allDetectedDates, url: extractedURL, recurrence: recurrenceRule, datePhrase: extractedDatePhrase)
     }
 }

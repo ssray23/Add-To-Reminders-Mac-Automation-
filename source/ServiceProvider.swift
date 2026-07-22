@@ -1,4 +1,5 @@
 import Cocoa
+import EventKit
 
 @objc class ServiceProvider: NSObject {
     private var isShowingAlert = false
@@ -69,33 +70,7 @@ import Cocoa
         }
         
         let parsedData = TextParser.parse(text: text)
-        var dateString = text
-        if !parsedData.title.isEmpty {
-            let wordCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_"))
-            let titleWords = parsedData.title.components(separatedBy: .whitespacesAndNewlines)
-            for word in titleWords {
-                guard !word.isEmpty else { continue }
-                let escapedWord = NSRegularExpression.escapedPattern(for: word)
-                
-                let startsWithWordChar = word.first?.unicodeScalars.first.map { wordCharacters.contains($0) } ?? false
-                let endsWithWordChar = word.last?.unicodeScalars.first.map { wordCharacters.contains($0) } ?? false
-                
-                let startBoundary = startsWithWordChar ? "\\b" : ""
-                let endBoundary = endsWithWordChar ? "\\b" : ""
-                let pattern = "(?i)\(startBoundary)\(escapedWord)\(endBoundary)"
-                
-                if let range = dateString.range(of: pattern, options: .regularExpression) {
-                    dateString.replaceSubrange(range, with: "")
-                }
-            }
-        }
-        dateString = dateString.replacingOccurrences(of: "(?i)\\b(due|before|at|on|for|in|by|until)\\s*$", with: "", options: .regularExpression)
-        dateString = dateString.replacingOccurrences(of: "^[\\s|&\\-]*|[\\s|&\\-]*$", with: "", options: .regularExpression)
-        dateString = dateString.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        if dateString.isEmpty {
-            dateString = "Tomorrow at 7am"
-        }
+        let dateString = TextParser.formatParsedDateFeedback(parsedData) ?? ""
         
         if isShowingAlert { return }
         isShowingAlert = true
@@ -118,7 +93,21 @@ import Cocoa
                 var newParsedData = TextParser.parse(text: combinedText)
                 
                 if let selectedDate = resultTuple.selectedDate {
-                    newParsedData = ParsedReminderData(title: newParsedData.title, date: selectedDate, allDetectedDates: newParsedData.allDetectedDates, url: newParsedData.url, recurrence: newParsedData.recurrence)
+                    var startDate = selectedDate
+                    var recRule = newParsedData.recurrence
+                    
+                    if !Calendar.current.isDateInToday(selectedDate) {
+                        recRule = EKRecurrenceRule(recurrenceWith: .daily, interval: 1, daysOfTheWeek: nil, daysOfTheMonth: nil, monthsOfTheYear: nil, weeksOfTheYear: nil, daysOfTheYear: nil, setPositions: nil, end: EKRecurrenceEnd(end: TextParser.endOfDay(for: selectedDate)))
+                        var startComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+                        startComps.hour = 7
+                        startComps.minute = 0
+                        startComps.second = 0
+                        if let s = Calendar.current.date(from: startComps) {
+                            startDate = s
+                        }
+                    }
+                    
+                    newParsedData = ParsedReminderData(title: newParsedData.title, date: startDate, allDetectedDates: newParsedData.allDetectedDates, url: newParsedData.url, recurrence: recRule)
                 }
                 
                 // Preserve URL from original parse if not modified, or from UI

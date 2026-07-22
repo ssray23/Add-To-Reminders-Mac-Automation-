@@ -95,23 +95,105 @@ struct QuickEntryView: View {
         return df
     }()
     
-    private var parsedDateFeedback: String? {
-        let trimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
+    private let dateFormatterOnly: DateFormatter = {
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.timeStyle = .none
+        return df
+    }()
+    
+    private var activeParsedData: ParsedReminderData? {
+        let titleTrimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let dateTrimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if !titleTrimmed.isEmpty {
+            let parsedTitle = TextParser.parse(text: titleTrimmed)
+            if parsedTitle.date != nil || parsedTitle.recurrence != nil {
+                return parsedTitle
+            }
+        }
+        
+        let combined = (titleTrimmed + " " + dateTrimmed).trimmingCharacters(in: .whitespacesAndNewlines)
+        if combined.isEmpty {
             return nil
         }
-        let parsed = TextParser.parse(text: trimmed)
-        if let date = parsed.date {
-            return "Will set due date: " + dateFormatter.string(from: date)
-        } else {
+        return TextParser.parse(text: combined)
+    }
+    
+    private var parsedDateFeedback: String? {
+        let dateTrimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let parsed = activeParsedData else { return nil }
+        
+        if let feedback = TextParser.formatParsedDateFeedback(parsed) {
+            return "Will set due date: " + feedback
+        } else if !dateTrimmed.isEmpty {
             return "⚠️ No date/time recognized (reminder will have no date)"
+        } else {
+            return nil
         }
     }
     
     private var dateTextHasValidDate: Bool {
-        let trimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return false }
-        return TextParser.parse(text: trimmed).date != nil
+        let titleTrimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let dateTrimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let combined = (titleTrimmed + " " + dateTrimmed).trimmingCharacters(in: .whitespacesAndNewlines)
+        if combined.isEmpty { return false }
+        return TextParser.parse(text: combined).date != nil
+    }
+    
+    @State private var isSeparating = false
+    
+    private func autoSeparateDateFromTitleIfNeeded() {
+        guard !isSeparating else { return }
+        let titleTrimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !titleTrimmed.isEmpty else { return }
+        
+        let parsed = TextParser.parse(text: titleTrimmed)
+        if (parsed.date != nil || parsed.recurrence != nil) && parsed.title != titleTrimmed {
+            let finalDateText = TextParser.formatParsedDateFeedback(parsed) ?? ""
+            
+            isSeparating = true
+            self.titleText = parsed.title
+            self.dateText = finalDateText
+            DispatchQueue.main.async {
+                self.isSeparating = false
+            }
+        }
+    }
+    
+    private var dynamicDetectedDates: [Date] {
+        let titleTrimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let dateTrimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let combined = (titleTrimmed + " " + dateTrimmed).trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if !combined.isEmpty {
+            let parsed = TextParser.parse(text: combined)
+            if parsed.allDetectedDates.count > 1 {
+                return parsed.allDetectedDates
+            }
+        }
+        return detectedDates
+    }
+    
+    private func formatDateOptionLabel(_ date: Date) -> String {
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.timeStyle = .short
+        
+        let dfOnly = DateFormatter()
+        dfOnly.dateStyle = .medium
+        dfOnly.timeStyle = .none
+        
+        if !Calendar.current.isDateInToday(date) {
+            var startComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+            startComps.hour = 7
+            startComps.minute = 0
+            startComps.second = 0
+            if let startDate = Calendar.current.date(from: startComps) {
+                return df.string(from: startDate) + " (Repeats daily until " + dfOnly.string(from: date) + ")"
+            }
+        }
+        return df.string(from: date)
     }
     
     var body: some View {
@@ -130,32 +212,41 @@ struct QuickEntryView: View {
                         .stroke(Color.accentColor.opacity(focusedField == .title ? 1.0 : 0.0), lineWidth: 2)
                 )
                 .focused($focusedField, equals: .title)
+                .onChange(of: focusedField) { newFocus in
+                    if newFocus != .title {
+                        autoSeparateDateFromTitleIfNeeded()
+                    }
+                }
                 .onSubmit {
+                    autoSeparateDateFromTitleIfNeeded()
                     onComplete((title: titleText, dateText: dateText, selectedDate: selectedDate, url: urlText, listIdentifier: selectedListIdentifier.isEmpty ? nil : selectedListIdentifier))
                 }
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         focusedField = .title
                     }
-                    if let first = detectedDates.first, detectedDates.count > 1 {
-                        selectedDate = first
+                    autoSeparateDateFromTitleIfNeeded()
+                    if let first = dynamicDetectedDates.first, dynamicDetectedDates.count > 1 {
+                        if selectedDate == nil {
+                            selectedDate = first
+                        }
                     }
                     fetchReminderLists()
                 }
                 
-            if detectedDates.count > 1 {
+            if dynamicDetectedDates.count > 1 {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Multiple dates detected. Which one would you like to use?")
                         .foregroundColor(.secondary)
                     
-                    ForEach(detectedDates, id: \.self) { date in
+                    ForEach(dynamicDetectedDates, id: \.self) { date in
                         Button(action: {
                             selectedDate = date
                         }) {
                             HStack {
                                 Image(systemName: selectedDate == date ? "largecircle.fill.circle" : "circle")
                                     .foregroundColor(selectedDate == date ? .accentColor : .secondary)
-                                Text(dateFormatter.string(from: date))
+                                Text(formatDateOptionLabel(date))
                                     .foregroundColor(.primary)
                                 Spacer()
                             }
@@ -183,6 +274,7 @@ struct QuickEntryView: View {
                         )
                         .focused($focusedField, equals: .date)
                         .onSubmit {
+                            autoSeparateDateFromTitleIfNeeded()
                             onComplete((title: titleText, dateText: dateText, selectedDate: nil, url: urlText, listIdentifier: selectedListIdentifier.isEmpty ? nil : selectedListIdentifier))
                         }
                     
@@ -206,6 +298,7 @@ struct QuickEntryView: View {
                 )
                 .focused($focusedField, equals: .url)
                 .onSubmit {
+                    autoSeparateDateFromTitleIfNeeded()
                     onComplete((title: titleText, dateText: dateText, selectedDate: selectedDate, url: urlText, listIdentifier: selectedListIdentifier.isEmpty ? nil : selectedListIdentifier))
                 }
             
@@ -249,6 +342,7 @@ struct QuickEntryView: View {
                 .keyboardShortcut(.escape, modifiers: [])
                 
                 Button(action: {
+                    autoSeparateDateFromTitleIfNeeded()
                     onComplete((title: titleText, dateText: dateText, selectedDate: selectedDate, url: urlText, listIdentifier: selectedListIdentifier.isEmpty ? nil : selectedListIdentifier))
                 }) {
                     Text("Add")
