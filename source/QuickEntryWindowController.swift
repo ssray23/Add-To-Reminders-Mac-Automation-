@@ -175,16 +175,14 @@ struct QuickEntryView: View {
         return detectedDates
     }
     
-    private var effectiveSelectedDate: Date? {
-        if let s = selectedDate, dynamicDetectedDates.contains(where: { isSameDate(s, $0) }) {
-            return s
-        }
-        return dynamicDetectedDates.first
-    }
+    @State private var selectedIndex: Int = 0
     
-    private func isSameDate(_ d1: Date?, _ d2: Date) -> Bool {
-        guard let d1 = d1 else { return false }
-        return abs(d1.timeIntervalSince(d2)) < 1.0
+    private var effectiveSelectedDate: Date? {
+        let dates = dynamicDetectedDates
+        if selectedIndex >= 0 && selectedIndex < dates.count {
+            return dates[selectedIndex]
+        }
+        return dates.first
     }
     
     private func formatDateOptionLabel(_ date: Date) -> String {
@@ -240,8 +238,8 @@ struct QuickEntryView: View {
                         focusedField = .title
                     }
                     autoSeparateDateFromTitleIfNeeded()
-                    if let first = dynamicDetectedDates.first, dynamicDetectedDates.count > 1 {
-                        selectedDate = first
+                    if dynamicDetectedDates.count > 1 {
+                        selectedIndex = 0
                     }
                     fetchReminderLists()
                 }
@@ -251,25 +249,27 @@ struct QuickEntryView: View {
                     Text("Multiple dates detected. Which one would you like to use?")
                         .foregroundColor(.secondary)
                     
-                    ForEach(dynamicDetectedDates, id: \.self) { date in
-                        HStack {
-                            Image(systemName: isSameDate(effectiveSelectedDate, date) ? "largecircle.fill.circle" : "circle")
-                                .foregroundColor(isSameDate(effectiveSelectedDate, date) ? .accentColor : .secondary)
-                            Text(dateFormatter.string(from: date))
-                                .foregroundColor(.primary)
-                            Spacer()
-                        }
-                        .padding(8)
-                        .background(Color(NSColor.textBackgroundColor).opacity(isSameDate(effectiveSelectedDate, date) ? 1.0 : 0.6))
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.accentColor.opacity(isSameDate(effectiveSelectedDate, date) ? 1.0 : 0.0), lineWidth: 2)
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
+                    ForEach(Array(dynamicDetectedDates.enumerated()), id: \.offset) { index, date in
+                        Button(action: {
+                            selectedIndex = index
                             selectedDate = date
+                        }) {
+                            HStack {
+                                Image(systemName: selectedIndex == index ? "largecircle.fill.circle" : "circle")
+                                    .foregroundColor(selectedIndex == index ? .accentColor : .secondary)
+                                Text(dateFormatter.string(from: date))
+                                    .foregroundColor(.primary)
+                                Spacer()
+                            }
+                            .padding(8)
+                            .background(Color(NSColor.textBackgroundColor).opacity(selectedIndex == index ? 1.0 : 0.6))
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.accentColor.opacity(selectedIndex == index ? 1.0 : 0.0), lineWidth: 2)
+                            )
                         }
+                        .buttonStyle(PlainButtonStyle())
                     }
                 }
             } else {
