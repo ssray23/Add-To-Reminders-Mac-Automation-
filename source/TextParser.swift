@@ -649,11 +649,15 @@ class TextParser {
         
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\u{200B}", with: "")
         
+        // Strip any (Repeats...) feedback or standalone repeats keywords left over
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\(\\s*repeats?\\s*[^\\)]*\\)", with: "", options: .regularExpression)
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\b(repeats?|repeating)\\b", with: "", options: .regularExpression)
+        
         // Remove trailing prepositions like "at", "on", "for", "in", "or", "and" which might have been left behind before the date
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\s+(expires|due|before|at|on|for|in|by|until|or|and)\\s*$", with: "", options: .regularExpression)
         
         // Clean up leftover words in parentheses if they are just prepositions/keywords now
-        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\(\\s*(expires|due|before|on|at|by|until|for|in)\\s*\\)", with: "()", options: .regularExpression)
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\(\\s*(expires|due|before|on|at|by|until|for|in|repeats?)\\s*\\)", with: "()", options: .regularExpression)
         
         // Remove empty parentheses/brackets that might have been left after removing the date
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\\(\\s*\\)", with: "", options: .regularExpression)
