@@ -175,24 +175,15 @@ struct QuickEntryView: View {
         return detectedDates
     }
     
+    private func isSameDate(_ d1: Date?, _ d2: Date) -> Bool {
+        guard let d1 = d1 else { return false }
+        return abs(d1.timeIntervalSince(d2)) < 1.0
+    }
+    
     private func formatDateOptionLabel(_ date: Date) -> String {
         let df = DateFormatter()
         df.dateStyle = .medium
         df.timeStyle = .short
-        
-        let dfOnly = DateFormatter()
-        dfOnly.dateStyle = .medium
-        dfOnly.timeStyle = .none
-        
-        if !Calendar.current.isDateInToday(date) {
-            var startComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-            startComps.hour = 7
-            startComps.minute = 0
-            startComps.second = 0
-            if let startDate = Calendar.current.date(from: startComps) {
-                return df.string(from: startDate) + " (Repeats daily until " + dfOnly.string(from: date) + ")"
-            }
-        }
         return df.string(from: date)
     }
     
@@ -243,7 +234,7 @@ struct QuickEntryView: View {
                     }
                     autoSeparateDateFromTitleIfNeeded()
                     if let first = dynamicDetectedDates.first, dynamicDetectedDates.count > 1 {
-                        if selectedDate == nil {
+                        if selectedDate == nil || !dynamicDetectedDates.contains(where: { isSameDate(selectedDate, $0) }) {
                             selectedDate = first
                         }
                     }
@@ -260,18 +251,18 @@ struct QuickEntryView: View {
                             selectedDate = date
                         }) {
                             HStack {
-                                Image(systemName: selectedDate == date ? "largecircle.fill.circle" : "circle")
-                                    .foregroundColor(selectedDate == date ? .accentColor : .secondary)
+                                Image(systemName: isSameDate(selectedDate, date) ? "largecircle.fill.circle" : "circle")
+                                    .foregroundColor(isSameDate(selectedDate, date) ? .accentColor : .secondary)
                                 Text(dateFormatter.string(from: date))
                                     .foregroundColor(.primary)
                                 Spacer()
                             }
                             .padding(8)
-                            .background(Color(NSColor.textBackgroundColor).opacity(selectedDate == date ? 1.0 : 0.6))
+                            .background(Color(NSColor.textBackgroundColor).opacity(isSameDate(selectedDate, date) ? 1.0 : 0.6))
                             .cornerRadius(8)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.accentColor.opacity(selectedDate == date ? 1.0 : 0.0), lineWidth: 2)
+                                    .stroke(Color.accentColor.opacity(isSameDate(selectedDate, date) ? 1.0 : 0.0), lineWidth: 2)
                             )
                         }
                         .buttonStyle(PlainButtonStyle())
