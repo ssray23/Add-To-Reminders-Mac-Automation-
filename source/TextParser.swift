@@ -275,13 +275,13 @@ class TextParser {
 
     static func extractRelativeDate(text: String, searchRange: NSRange? = nil) -> (Date, NSRange, Bool)? {
         let units = "m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|wks|week|weeks|mo|mos|month|months|y|yr|yrs|year|years"
-        let pattern = "(?i)(?:\\bin\\s+(\\d+(?:[.,]\\d+)?)\\s*(\(units))\\b|\\b(\\d+(?:[.,]\\d+)?)\\s*(\(units))\\b\\s+from\\s+now)"
+        let pattern = "(?i)(?:\\b(?:in|after)\\s+)?(\\d+(?:[.,]\\d+)?)\\s*(\(units))\\b"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         
         let nsRange = searchRange ?? NSRange(text.startIndex..<text.endIndex, in: text)
         if let match = regex.firstMatch(in: text, options: [], range: nsRange) {
-            let valRange = match.range(at: 1).location != NSNotFound ? match.range(at: 1) : match.range(at: 3)
-            let unRange = match.range(at: 2).location != NSNotFound ? match.range(at: 2) : match.range(at: 4)
+            let valRange = match.range(at: 1)
+            let unRange = match.range(at: 2)
             
             if let valueRange = Range(valRange, in: text),
                let unitRange = Range(unRange, in: text) {
@@ -339,6 +339,13 @@ class TextParser {
         // Normalize whitespace (tabs, newlines, multiple spaces) to a single space
         // because NSDataDetector often fails to recognize dates separated by them.
         var cleanOriginalText = sanitizedText.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
+        
+        let relUnits = "m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|wks|week|weeks|mo|mos|month|months|y|yr|yrs|year|years"
+        let sharedRangePattern = "(?i)\\bin\\s+(\\d+(?:[.,]\\d+)?)\\s*(?:or|to|-|\\/)\\s*(\\d+(?:[.,]\\d+)?)\\s*(\(relUnits))\\b"
+        if let rangeRegex = try? NSRegularExpression(pattern: sharedRangePattern, options: []) {
+            let rangeNSRange = NSRange(cleanOriginalText.startIndex..<cleanOriginalText.endIndex, in: cleanOriginalText)
+            cleanOriginalText = rangeRegex.stringByReplacingMatches(in: cleanOriginalText, options: [], range: rangeNSRange, withTemplate: "in $1 $3 or in $2 $3")
+        }
         
         // Pre-process specifically for the date detector to handle common typos
         let typoFixes = [
