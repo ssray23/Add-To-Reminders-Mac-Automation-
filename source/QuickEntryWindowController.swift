@@ -262,7 +262,7 @@ struct QuickEntryView: View {
                             HStack {
                                 Image(systemName: selectedDate == date ? "largecircle.fill.circle" : "circle")
                                     .foregroundColor(selectedDate == date ? .accentColor : .secondary)
-                                Text(formatDateOptionLabel(date))
+                                Text(dateFormatter.string(from: date))
                                     .foregroundColor(.primary)
                                 Spacer()
                             }

@@ -659,11 +659,18 @@ class TextParser {
             finalTitle = "New Reminder"
         }
         
-        for d in allRecurrenceDates {
-            if !allDetectedDates.contains(where: { Calendar.current.isDate($0, inSameDayAs: d) }) {
-                allDetectedDates.append(d)
+        var uniqueDates: [Date] = []
+        for d in allDetectedDates {
+            if !uniqueDates.contains(where: { abs($0.timeIntervalSince(d)) < 60 }) {
+                uniqueDates.append(d)
             }
         }
+        for d in allRecurrenceDates {
+            if !uniqueDates.contains(where: { Calendar.current.isDate($0, inSameDayAs: d) || abs($0.timeIntervalSince(d)) < 60 }) {
+                uniqueDates.append(d)
+            }
+        }
+        allDetectedDates = uniqueDates
         
         if !allDetectedDates.isEmpty {
             extractedDate = allDetectedDates.first
