@@ -131,6 +131,11 @@ class TextParser {
                             matchedFrequency = item.frequency
                             matchedInterval = item.interval
                             matchedDaysOfTheWeek = item.daysOfTheWeek
+                            if item.daysOfTheWeek?.contains(where: { $0.dayOfTheWeek == .saturday || $0.dayOfTheWeek == .sunday }) == true {
+                                if extractedRecurrenceStartDate == nil {
+                                    extractedRecurrenceStartDate = calculateWeekendTarget(from: Date(), isNextWeekend: false)
+                                }
+                            }
                             break
                         }
                     }
@@ -327,6 +332,95 @@ class TextParser {
         return nil
     }
 
+    static func calculateWeekendTarget(from baseDate: Date, isNextWeekend: Bool) -> Date {
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: baseDate) // 1 = Sun, 2 = Mon, ..., 7 = Sat
+        
+        var daysToAdd: Int
+        if weekday == 7 { // Saturday
+            daysToAdd = isNextWeekend ? 7 : 0
+        } else if weekday == 1 { // Sunday
+            daysToAdd = isNextWeekend ? 6 : 0
+        } else { // Mon (2) .. Fri (6)
+            let daysToSat = 7 - weekday
+            daysToAdd = isNextWeekend ? (daysToSat + 7) : daysToSat
+        }
+        
+        return calendar.date(byAdding: .day, value: daysToAdd, to: baseDate) ?? baseDate
+    }
+
+    static func extractRelativePhraseDates(text: inout String, baseDate: Date = Date()) -> [(DateComponents, NSRange)] {
+        var result: [(DateComponents, NSRange)] = []
+        let calendar = Calendar.current
+        
+        let patterns: [(regex: String, resolver: (Date) -> [Date])] = [
+            // Next weekend (Saturday & Sunday)
+            ("(?i)\\b(?:on\\s+|by\\s+|due\\s+|for\\s+|in\\s+|over\\s+|during\\s+)?(?:next\\s+weekend)\\b", { base in
+                let sat = calculateWeekendTarget(from: base, isNextWeekend: true)
+                let sun = calendar.date(byAdding: .day, value: 1, to: sat) ?? sat
+                return [sat, sun]
+            }),
+            // Weekend (this weekend, on weekend, over the weekend, coming weekend, etc. -> Saturday & Sunday)
+            ("(?i)\\b(?:on\\s+|by\\s+|due\\s+|for\\s+|in\\s+|over\\s+|during\\s+|this\\s+)?(?:this\\s+coming\\s+weekend|coming\\s+weekend|this\\s+weekend|the\\s+weekend|weekend)\\b", { base in
+                let sat = calculateWeekendTarget(from: base, isNextWeekend: false)
+                let sun = calendar.date(byAdding: .day, value: 1, to: sat) ?? sat
+                return [sat, sun]
+            }),
+            // Next week
+            ("(?i)\\b(?:on\\s+|by\\s+|due\\s+|for\\s+|in\\s+)?(?:next\\s+week)\\b", { base in
+                [calendar.date(byAdding: .day, value: 7, to: base) ?? base]
+            }),
+            // End of week / eow
+            ("(?i)\\b(?:by\\s+|at\\s+|due\\s+|for\\s+)?(?:the\\s+)?(?:end\\s+of\\s+(?:the\\s+)?week|eow)\\b", { base in
+                let w = calendar.component(.weekday, from: base)
+                let daysToFri = w <= 6 ? (6 - w) : 6
+                return [calendar.date(byAdding: .day, value: daysToFri, to: base) ?? base]
+            }),
+            // End of month / eom
+            ("(?i)\\b(?:by\\s+|at\\s+|due\\s+|for\\s+)?(?:the\\s+)?(?:end\\s+of\\s+(?:the\\s+)?month|eom)\\b", { base in
+                let comps = calendar.dateComponents([.year, .month], from: base)
+                if let year = comps.year, let month = comps.month,
+                   let target = calendar.date(from: DateComponents(year: year, month: month + 1, day: 0)) {
+                    return [target]
+                }
+                return [base]
+            }),
+            // End of year / eoy
+            ("(?i)\\b(?:by\\s+|at\\s+|due\\s+|for\\s+)?(?:the\\s+)?(?:end\\s+of\\s+(?:the\\s+)?year|eoy)\\b", { base in
+                let comps = calendar.dateComponents([.year], from: base)
+                if let year = comps.year,
+                   let target = calendar.date(from: DateComponents(year: year, month: 12, day: 31)) {
+                    return [target]
+                }
+                return [base]
+            })
+        ]
+        
+        for item in patterns {
+            guard let regex = try? NSRegularExpression(pattern: item.regex, options: []) else { continue }
+            let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+            let matches = regex.matches(in: text, options: [], range: nsRange)
+            
+            for match in matches {
+                let targetDates = item.resolver(baseDate)
+                for targetDate in targetDates {
+                    var comps = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: targetDate)
+                    comps.hour = nil
+                    comps.minute = nil
+                    comps.second = nil
+                    result.append((comps, match.range))
+                }
+                
+                if let range = Range(match.range, in: text) {
+                    let spaces = String(repeating: " ", count: text.distance(from: range.lowerBound, to: range.upperBound))
+                    text.replaceSubrange(range, with: spaces)
+                }
+            }
+        }
+        
+        return result
+    }
+
     private static func hasExplicitTimeInText(_ text: String) -> Bool {
         let pattern = "(?i)\\b(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)|noon|midnight|\\d{1,2}:\\d{2})\\b"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return false }
@@ -491,6 +585,11 @@ class TextParser {
         var allRecurrenceDates: [Date] = []
         let recurrenceRule = extractRecurrence(text: &cleanOriginalText, extractedRecurrenceStartDate: &extractedRecurrenceStartDate, extractedDatePhrase: &extractedDatePhrase, allRecurrenceDates: &allRecurrenceDates)
         
+        var extractedRelativeComponents: [(DateComponents, NSRange)] = []
+        
+        let phraseComponents = extractRelativePhraseDates(text: &cleanOriginalText)
+        extractedRelativeComponents.append(contentsOf: phraseComponents)
+        
         // Hide tricky words with a zero-width space to prevent NSDataDetector from incorrectly interpreting them as durations starting today
         let trickyWords = ["due", "before", "by", "until", "till", "til", "through", "thru"]
         for word in trickyWords {
@@ -501,8 +600,6 @@ class TextParser {
                 cleanOriginalText = regex.stringByReplacingMatches(in: cleanOriginalText, options: [], range: range, withTemplate: "$1\u{200B}$2")
             }
         }
-        
-        var extractedRelativeComponents: [(DateComponents, NSRange)] = []
         
         while let relativeData = extractRelativeDate(text: cleanOriginalText) {
             let date = relativeData.0
@@ -573,65 +670,39 @@ class TextParser {
             // Sort components by their position in the string
             dateComponentsGroupsWithRange.sort { $0.1.location < $1.1.location }
             
-            // Now resolve date groups. Usually they might be separate matches like "August 12" and "at 5pm" or separate dates entirely.
-            var currentMergedComponents = DateComponents()
+            // Now resolve date groups. Collect date candidates and apply shared time component if present.
+            var dateCandidates: [DateComponents] = []
+            var timeCandidate: DateComponents? = nil
+            
             for groupData in dateComponentsGroupsWithRange {
                 let group = groupData.0
                 let hasDateParts = group.year != nil || group.month != nil || group.day != nil
                 let hasTimeParts = group.hour != nil || group.minute != nil
                 
-                let currentHasDate = currentMergedComponents.year != nil || currentMergedComponents.month != nil || currentMergedComponents.day != nil
-                let currentHasTime = currentMergedComponents.hour != nil || currentMergedComponents.minute != nil
-                
-                if (hasDateParts && currentHasDate) || (hasTimeParts && currentHasTime) {
-                    // This is a separate date, let's flush current
-                    if currentHasDate || currentHasTime {
-                        if !currentHasDate {
-                            let todayComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-                            currentMergedComponents.year = todayComps.year
-                            currentMergedComponents.month = todayComps.month
-                            currentMergedComponents.day = todayComps.day
-                        }
-                        if currentMergedComponents.hour == nil {
-                            currentMergedComponents.hour = 7
-                            currentMergedComponents.minute = 0
-                            currentMergedComponents.second = 0
-                        }
-                        if let d = Calendar.current.date(from: currentMergedComponents) {
-                            allDetectedDates.append(d)
-                        }
-                    }
-                    currentMergedComponents = group
-                } else {
-                    if hasDateParts {
-                        currentMergedComponents.year = group.year
-                        currentMergedComponents.month = group.month
-                        currentMergedComponents.day = group.day
-                    }
-                    if hasTimeParts {
-                        currentMergedComponents.hour = group.hour
-                        currentMergedComponents.minute = group.minute
-                        currentMergedComponents.second = group.second
-                    }
+                if hasDateParts {
+                    dateCandidates.append(group)
+                }
+                if hasTimeParts {
+                    timeCandidate = group
                 }
             }
             
-            // Flush the last one
-            let currentHasDate = currentMergedComponents.year != nil || currentMergedComponents.month != nil || currentMergedComponents.day != nil
-            let currentHasTime = currentMergedComponents.hour != nil || currentMergedComponents.minute != nil
-            if currentHasDate || currentHasTime {
-                if !currentHasDate {
-                    let todayComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-                    currentMergedComponents.year = todayComps.year
-                    currentMergedComponents.month = todayComps.month
-                    currentMergedComponents.day = todayComps.day
+            if dateCandidates.isEmpty && timeCandidate != nil {
+                let todayComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+                dateCandidates.append(todayComps)
+            }
+            
+            for var dateComp in dateCandidates {
+                if let timeComp = timeCandidate {
+                    dateComp.hour = timeComp.hour
+                    dateComp.minute = timeComp.minute
+                    dateComp.second = timeComp.second
+                } else if dateComp.hour == nil {
+                    dateComp.hour = 7
+                    dateComp.minute = 0
+                    dateComp.second = 0
                 }
-                if currentMergedComponents.hour == nil {
-                    currentMergedComponents.hour = 7
-                    currentMergedComponents.minute = 0
-                    currentMergedComponents.second = 0
-                }
-                if let d = Calendar.current.date(from: currentMergedComponents) {
+                if let d = Calendar.current.date(from: dateComp) {
                     allDetectedDates.append(d)
                 }
             }
@@ -652,6 +723,10 @@ class TextParser {
         // Strip any (Repeats...) feedback or standalone repeats keywords left over
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\(\\s*repeats?\\s*[^\\)]*\\)", with: "", options: .regularExpression)
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\b(repeats?|repeating)\\b", with: "", options: .regularExpression)
+        
+        // Strip leftover time expressions like "at 12", "at 12:00", "at 5pm", "noon", "midnight"
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\b(?:at|by|due|on)?\\s*\\d{1,2}(?::\\d{2})?\\s*(?:am|pm|a\\.m\\.|p\\.m\\.|noon|midnight)?\\b", with: "", options: .regularExpression)
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\b(noon|midnight)\\b", with: "", options: .regularExpression)
         
         // Remove trailing prepositions like "at", "on", "for", "in", "or", "and" which might have been left behind before the date
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\s+(expires|due|before|at|on|for|in|by|until|or|and)\\s*$", with: "", options: .regularExpression)
@@ -712,21 +787,31 @@ class TextParser {
         }
         allDetectedDates = normalizedDates
         
-        if !allDetectedDates.isEmpty {
-            extractedDate = allDetectedDates.first
-        } else if recurrenceRule != nil {
-            if let recStart = extractedRecurrenceStartDate {
+        if let recStart = extractedRecurrenceStartDate, recurrenceRule != nil {
+            if let firstDate = allDetectedDates.first {
+                var recComps = Calendar.current.dateComponents([.year, .month, .day], from: recStart)
+                let timeComps = Calendar.current.dateComponents([.hour, .minute, .second], from: firstDate)
+                recComps.hour = timeComps.hour
+                recComps.minute = timeComps.minute
+                recComps.second = timeComps.second
+                if let mergedRecStart = Calendar.current.date(from: recComps) {
+                    extractedDate = mergedRecStart
+                    allDetectedDates = [mergedRecStart]
+                }
+            } else {
                 extractedDate = recStart
                 allDetectedDates = [recStart]
-            } else {
-                var comps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-                comps.hour = 7
-                comps.minute = 0
-                comps.second = 0
-                if let defaultStart = Calendar.current.date(from: comps) {
-                    extractedDate = defaultStart
-                    allDetectedDates = [defaultStart]
-                }
+            }
+        } else if !allDetectedDates.isEmpty {
+            extractedDate = allDetectedDates.first
+        } else if recurrenceRule != nil {
+            var comps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+            comps.hour = 7
+            comps.minute = 0
+            comps.second = 0
+            if let defaultStart = Calendar.current.date(from: comps) {
+                extractedDate = defaultStart
+                allDetectedDates = [defaultStart]
             }
         }
         
