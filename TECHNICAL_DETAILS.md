@@ -45,4 +45,9 @@ The application is written natively in Swift and operates as an `LSUIElement` ba
 
 ### 9. `build.sh` (Shell Script)
 - **Role**: A streamlined build pipeline replacing Xcode's xcodeproj overhead.
-- **Details**: First, it safely terminates any currently running instances of the app (`killall`) so new changes apply instantly. Then, it compiles the pure `.swift` files into a Mach-O arm64 binary using `swiftc`. It securely constructs the standard macOS application bundle directly in `~/Applications` to prevent macOS code signing verification from stalling on iCloud sync daemons. It dynamically copies in the `Info.plist`, steals the official `AppIcon.icns` from the system Reminders app, ad-hoc signs the application using `codesign`, and importantly calls `/System/Library/CoreServices/pbs -flush` to immediately register the newly built service with the macOS Services architecture.
+- **Details**: First, it executes the automated regression test suite (`tests/RegressionTests.swift`) to ensure 100% pass rate. It safely terminates any currently running instances of the app (`killall`) so new changes apply instantly. Then, it compiles the pure `.swift` files into a Mach-O arm64 binary using `swiftc`. It securely constructs the standard macOS application bundle directly in `~/Applications` to prevent macOS code signing verification from stalling on iCloud sync daemons. It dynamically copies in the `Info.plist`, steals the official `AppIcon.icns` from the system Reminders app, ad-hoc signs the application using `codesign`, and importantly calls `/System/Library/CoreServices/pbs -flush` to immediately register the newly built service with the macOS Services architecture.
+
+### 10. `tests/RegressionTests.swift`
+- **Role**: Automated test suite for `TextParser.swift`.
+- **Details**: Executes 22 assertions verifying relative duration parsing ("in 2 hours"), date-only fallbacks (7:00 AM default), absolute times ("3pm", "14:30"), typo handling ("tommorow", "tmrw"), tricky word isolation ("due", "before"), weekend phrase resolution, URL extraction, and recurrence rules. Integrated directly into `build.sh` to prevent regressions.
+

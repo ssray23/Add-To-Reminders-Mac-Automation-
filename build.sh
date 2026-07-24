@@ -26,6 +26,12 @@ rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR"
 mkdir -p "$APP_DIR/Contents/Resources"
 
+# Run regression tests
+echo "Running automated regression tests..."
+swiftc source/TextParser.swift tests/RegressionTests.swift -o /tmp/regression_test_runner
+/tmp/regression_test_runner
+rm -f /tmp/regression_test_runner
+
 # Compile Swift files
 echo "Compiling Swift files..."
 swiftc source/*.swift -o "$MACOS_DIR/$APP_NAME" -target arm64-apple-macosx12.0

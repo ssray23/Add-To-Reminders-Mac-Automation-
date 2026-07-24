@@ -422,7 +422,8 @@ class TextParser {
     }
 
     private static func hasExplicitTimeInText(_ text: String) -> Bool {
-        let pattern = "(?i)\\b(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)|noon|midnight|\\d{1,2}:\\d{2})\\b"
+        let relTimeUnits = "m|min|mins|minute|minutes|h|hr|hrs|hour|hours"
+        let pattern = "(?i)(\\b\\d{1,2}(?::\\d{2})?\\s*(?:am|pm|a\\.m\\.|p\\.m\\.)\\b|\\b\\d{1,2}:\\d{2}\\b|\\bnoon\\b|\\bmidnight\\b|\\bat\\s+\\d{1,2}\\b|(?:\\b(?:in|after)\\s+)?\\d+(?:[.,]\\d+)?\\s*(?:\(relTimeUnits))\\b)"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return false }
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         return regex.firstMatch(in: text, options: [], range: range) != nil
@@ -693,14 +694,16 @@ class TextParser {
             }
             
             for var dateComp in dateCandidates {
-                if let timeComp = timeCandidate {
-                    dateComp.hour = timeComp.hour
-                    dateComp.minute = timeComp.minute
-                    dateComp.second = timeComp.second
-                } else if dateComp.hour == nil {
-                    dateComp.hour = 7
-                    dateComp.minute = 0
-                    dateComp.second = 0
+                if dateComp.hour == nil {
+                    if let timeComp = timeCandidate {
+                        dateComp.hour = timeComp.hour
+                        dateComp.minute = timeComp.minute
+                        dateComp.second = timeComp.second
+                    } else {
+                        dateComp.hour = 7
+                        dateComp.minute = 0
+                        dateComp.second = 0
+                    }
                 }
                 if let d = Calendar.current.date(from: dateComp) {
                     allDetectedDates.append(d)
@@ -710,7 +713,7 @@ class TextParser {
             
             // Second pass: Remove parsed dates from the string (must iterate backwards to preserve ranges)
             for match in matches.reversed() {
-                if match.resultType == .date {
+                if match.resultType == .date || match.resultType == .link {
                     if let range = Range(match.range, in: cleanOriginalText) {
                         cleanOriginalText.removeSubrange(range)
                     }
@@ -753,7 +756,7 @@ class TextParser {
         }
         
         var normalizedDates: [Date] = []
-        let explicitTimePresent = hasExplicitTimeInText(text)
+        let explicitTimePresent = hasExplicitTimeInText(text) || hasExplicitTimeInText(cleanOriginalText)
         
         for d in allDetectedDates {
             var norm = d
