@@ -28,6 +28,15 @@ class TextParser {
         return Calendar.current.date(from: components) ?? date
     }
 
+    private static func parseNumberWordOrDigits(_ string: String) -> Int? {
+        if let val = Int(string) { return val }
+        let wordMap = [
+            "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+            "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
+        ]
+        return wordMap[string.lowercased()]
+    }
+
     static func formatParsedDateFeedback(_ parsed: ParsedReminderData) -> String? {
         guard let date = parsed.date else { return nil }
         
@@ -423,17 +432,21 @@ class TextParser {
             }
             
             if matchedFrequency == nil {
-                let forDaysPattern = "(?i)\\bfor\\s+(?:the\\s+next\\s+)?(\\d+)\\s+days?(?:\\s+from\\s+today)?\\b"
+                let forDaysPattern = "(?i)\\bfor\\s+(?:the\\s+)?(?:next\\s+)?(\\d+|one|two|three|four|five|six|seven|eight|nine|ten)\\s+days?(?:\\s+from\\s+today)?\\b"
                 if let regex = try? NSRegularExpression(pattern: forDaysPattern, options: []) {
                     let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
                     if let match = regex.firstMatch(in: text, options: [], range: nsRange),
-                       let numRange = Range(match.range(at: 1), in: text) {
-                        let numDays = Int(String(text[numRange])) ?? 1
-                        if let targetDate = Calendar.current.date(byAdding: .day, value: numDays, to: Date()) {
-                            allRecurrenceDates.append(targetDate)
+                       let numRange = Range(match.range(at: 1), in: text),
+                       let numDays = parseNumberWordOrDigits(String(text[numRange])) {
+                        let baseStart = extractedRecurrenceStartDate ?? Date()
+                        if let targetDate = Calendar.current.date(byAdding: .day, value: numDays, to: baseStart) {
                             matchedFrequency = .daily
                             matchedInterval = 1
                             recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: targetDate))
+                            if extractedRecurrenceStartDate == nil {
+                                extractedRecurrenceStartDate = baseStart
+                            }
+                            allRecurrenceDates.append(baseStart)
                             if let range = Range(match.range, in: text) {
                                 matchRangeToRemove = range
                             }
@@ -449,19 +462,26 @@ class TextParser {
         
         text.removeSubrange(removeRange)
         
-        let secondaryForDaysPattern = "(?i)\\bfor\\s+(?:the\\s+next\\s+)?(\\d+)\\s+days?(?:\\s+from\\s+today)?\\b"
-        if let regex = try? NSRegularExpression(pattern: secondaryForDaysPattern, options: []) {
-            let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
-            if let match = regex.firstMatch(in: text, options: [], range: nsRange),
-               let numRange = Range(match.range(at: 1), in: text) {
-                let numDays = Int(String(text[numRange])) ?? 1
-                if let secDate = Calendar.current.date(byAdding: .day, value: numDays, to: Date()) {
-                    allRecurrenceDates.append(secDate)
+        if recurrenceEnd == nil {
+            let secondaryForDaysPattern = "(?i)\\bfor\\s+(?:the\\s+)?(?:next\\s+)?(\\d+|one|two|three|four|five|six|seven|eight|nine|ten)\\s+days?(?:\\s+from\\s+today)?\\b"
+            if let regex = try? NSRegularExpression(pattern: secondaryForDaysPattern, options: []) {
+                let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+                if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+                   let numRange = Range(match.range(at: 1), in: text),
+                   let numDays = parseNumberWordOrDigits(String(text[numRange])) {
+                    let baseStart = extractedRecurrenceStartDate ?? Date()
+                    if let secDate = Calendar.current.date(byAdding: .day, value: numDays, to: baseStart) {
+                        recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: secDate))
+                        if extractedRecurrenceStartDate == nil {
+                            extractedRecurrenceStartDate = baseStart
+                        }
+                        allRecurrenceDates.append(baseStart)
+                    }
                 }
             }
         }
         
-        let secondaryForDays = "(?i)\\s*[-–—]?\\s*(?:and\\s+it[’']s\\s+sticking\\s+around\\s+)?for\\s+(?:the\\s+next\\s+)?\\d+\\s+days?(?:\\s+from\\s+today)?\\.?"
+        let secondaryForDays = "(?i)\\s*[-–—]?\\s*(?:and\\s+it[’']s\\s+sticking\\s+around\\s+)?for\\s+(?:the\\s+)?(?:next\\s+)?(?:\\d+|one|two|three|four|five|six|seven|eight|nine|ten)\\s+days?(?:\\s+from\\s+today)?\\.?"
         text = text.replacingOccurrences(of: secondaryForDays, with: "", options: .regularExpression)
         
         if recurrenceEnd == nil {

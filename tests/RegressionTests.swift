@@ -273,11 +273,43 @@ struct RegressionTests {
         let r29 = TextParser.parse(text: "Take antibiotics for 7 days")
         assertTest("'for 7 days' title clean", r29.title == "Take antibiotics", "Got '\(r29.title)'")
         assertTest("'for 7 days' recurrence exists", r29.recurrence != nil, "Recurrence was nil")
+        if let startDate = r29.date {
+            assertTest("'for 7 days' start date is today", calendar.isDate(startDate, inSameDayAs: Date()), "Got \(formatter.string(from: startDate))")
+        } else {
+            assertTest("'for 7 days' start date exists", false, "date was nil")
+        }
         if let end = r29.recurrence?.recurrenceEnd?.endDate {
             let expected = calendar.date(byAdding: .day, value: 7, to: Date())!
             assertTest("'for 7 days' end date is ~7 days out", calendar.isDate(end, inSameDayAs: expected), "Got \(formatter.string(from: end))")
         } else {
             assertTest("'for 7 days' recurrenceEnd exists", false, "recurrenceEnd was nil")
+        }
+
+        let r29b = TextParser.parse(text: "Lidl BDay Treat for next 4 days")
+        assertTest("'for next 4 days' title clean", r29b.title == "Lidl BDay Treat", "Got '\(r29b.title)'")
+        assertTest("'for next 4 days' recurrence exists", r29b.recurrence != nil, "Recurrence was nil")
+        if let startDate = r29b.date {
+            assertTest("'for next 4 days' start date is today", calendar.isDate(startDate, inSameDayAs: Date()), "Got \(formatter.string(from: startDate))")
+            let hour = calendar.component(.hour, from: startDate)
+            assertTest("'for next 4 days' defaults to 7:00 AM", hour == 7, "Got hour \(hour)")
+        } else {
+            assertTest("'for next 4 days' start date exists", false, "date was nil")
+        }
+        if let end = r29b.recurrence?.recurrenceEnd?.endDate {
+            let expected = calendar.date(byAdding: .day, value: 4, to: Date())!
+            assertTest("'for next 4 days' end date is ~4 days out", calendar.isDate(end, inSameDayAs: expected), "Got \(formatter.string(from: end))")
+        } else {
+            assertTest("'for next 4 days' recurrenceEnd exists", false, "recurrenceEnd was nil")
+        }
+
+        let r29c = TextParser.parse(text: "Take medicine daily for 4 days")
+        assertTest("'daily for 4 days' title clean", r29c.title == "Take medicine", "Got '\(r29c.title)'")
+        assertTest("'daily for 4 days' recurrence exists", r29c.recurrence != nil, "Recurrence was nil")
+        if let end = r29c.recurrence?.recurrenceEnd?.endDate {
+            let expected = calendar.date(byAdding: .day, value: 4, to: Date())!
+            assertTest("'daily for 4 days' end date is ~4 days out", calendar.isDate(end, inSameDayAs: expected), "Got \(formatter.string(from: end))")
+        } else {
+            assertTest("'daily for 4 days' recurrenceEnd exists", false, "recurrenceEnd was nil")
         }
 
         // 15. "Until <date>" Trailing Recurrence End

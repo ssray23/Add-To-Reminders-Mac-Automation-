@@ -49,5 +49,4 @@ The application is written natively in Swift and operates as an `LSUIElement` ba
 
 ### 10. `tests/RegressionTests.swift`
 - **Role**: Automated test suite for `TextParser.swift`.
-- **Details**: Executes 74 assertions verifying relative duration parsing ("in 2 hours"), date-only fallbacks (7:00 AM default), absolute times ("3pm", "14:30"), typo handling ("tommorow", "tmrw"), tricky word isolation ("due", "before"), weekend phrase resolution, currency preservation ("£5.00"), bare number preservation ("Buy 12 eggs", "iOS 18"), URL extraction, and recurrence rules. Integrated directly into `build.sh` to prevent regressions.
-
+- **Details**: Executes 83 assertions verifying relative duration parsing ("in 2 hours"), date-only fallbacks (7:00 AM default), absolute times ("3pm", "14:30"), typo handling ("tommorow", "tmrw"), tricky word isolation ("due", "before"), weekend phrase resolution, currency preservation ("£5.00"), bare number preservation ("Buy 12 eggs", "iOS 18"), URL extraction, duration recurrences ("for 7 days", "for next 4 days"), and recurrence rules. Integrated directly into `build.sh` to prevent regressions.
