@@ -212,13 +212,16 @@ struct RegressionTests {
         assertKnownBug("Name 'Tony' preserved (not rewritten to 'today')", b1.title == "Call Tony about the invoice", "Got '\(b1.title)' — caused by typoFixes['tony'] = 'today'")
 
         let b2 = TextParser.parse(text: "Buy 12 eggs")
-        assertKnownBug("Bare number '12' preserved in title", b2.title == "Buy 12 eggs", "Got '\(b2.title)' — caused by overly-greedy time-strip regex")
+        assertTest("Bare number '12' preserved in title", b2.title == "Buy 12 eggs", "Got '\(b2.title)'")
 
         let b3 = TextParser.parse(text: "iOS 18 release notes")
-        assertKnownBug("Bare number '18' preserved in title", b3.title == "iOS 18 release notes", "Got '\(b3.title)' — same time-strip regex bug")
+        assertTest("Bare number '18' preserved in title", b3.title == "iOS 18 release notes", "Got '\(b3.title)'")
 
         let b4 = TextParser.parse(text: "Room 12 booking confirmed")
-        assertKnownBug("Bare number mid-sentence preserved", b4.title == "Room 12 booking confirmed", "Got '\(b4.title)' — same time-strip regex bug")
+        assertTest("Bare number mid-sentence preserved", b4.title == "Room 12 booking confirmed", "Got '\(b4.title)'")
+
+        let b5 = TextParser.parse(text: "you have £5.00 Rewards waiting for you to spend")
+        assertTest("Currency amount '£5.00' preserved in title", b5.title == "you have £5.00 Rewards waiting for you to spend", "Got '\(b5.title)'")
 
         // 11. Recurrence Frequency & Interval Coverage
         print("\n--- 11. Recurrence Frequency & Interval Coverage ---")

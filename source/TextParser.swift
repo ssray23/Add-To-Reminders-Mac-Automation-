@@ -955,7 +955,8 @@ class TextParser {
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\b(repeats?|repeating)\\b", with: "", options: .regularExpression)
         
         // Strip leftover time expressions like "at 12", "at 12:00", "at 5pm", "noon", "midnight"
-        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\b(?:at|by|due|on)?\\s*\\d{1,2}(?::\\d{2})?\\s*(?:am|pm|a\\.m\\.|p\\.m\\.|noon|midnight)?\\b", with: "", options: .regularExpression)
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\b(?:at|by|due|on)?\\s*(?:\\d{1,2}:\\d{2}\\s*(?:am|pm|a\\.m\\.|p\\.m\\.)?|\\d{1,2}\\s*(?:am|pm|a\\.m\\.|p\\.m\\.)|noon|midnight)\\b", with: "", options: .regularExpression)
+        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\b(?:at|by|due|on)\\s+\\d{1,2}\\b", with: "", options: .regularExpression)
         cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\b(noon|midnight)\\b", with: "", options: .regularExpression)
         
         // Remove trailing prepositions like "at", "on", "for", "in", "or", "and" which might have been left behind before the date
