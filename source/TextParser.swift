@@ -68,14 +68,243 @@ class TextParser {
         return remainder.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private static func parseMonthString(_ string: String) -> Int? {
+        let s = string.lowercased()
+        let months = [
+            "jan": 1, "january": 1,
+            "feb": 2, "february": 2,
+            "mar": 3, "march": 3,
+            "apr": 4, "april": 4,
+            "may": 5,
+            "jun": 6, "june": 6,
+            "jul": 7, "july": 7,
+            "aug": 8, "august": 8,
+            "sep": 9, "sept": 9, "september": 9,
+            "oct": 10, "october": 10,
+            "nov": 11, "november": 11,
+            "dec": 12, "december": 12
+        ]
+        return months[s]
+    }
+
+    private static func createRangeDate(year: Int?, month: Int, day: Int, baseDate: Date = Date()) -> Date? {
+        let calendar = Calendar.current
+        let currentYear = calendar.component(.year, from: baseDate)
+        
+        let targetYear: Int
+        if let y = year {
+            targetYear = y
+        } else {
+            let testComps = DateComponents(year: currentYear, month: month, day: day)
+            if let testDate = calendar.date(from: testComps) {
+                let sixMonthsAgo = calendar.date(byAdding: .month, value: -6, to: baseDate) ?? baseDate
+                if testDate < sixMonthsAgo {
+                    targetYear = currentYear + 1
+                } else {
+                    targetYear = currentYear
+                }
+            } else {
+                targetYear = currentYear
+            }
+        }
+        
+        var comps = DateComponents(year: targetYear, month: month, day: day)
+        comps.hour = 7
+        comps.minute = 0
+        comps.second = 0
+        return calendar.date(from: comps)
+    }
+
+    static func extractDateRange(text: String, baseDate: Date = Date()) -> (startDate: Date, endDate: Date, range: NSRange)? {
+        let calendar = Calendar.current
+        let prefixPattern = "(?:\\b(?:from|between|during|valid|available|on)\\s+)?"
+        let monthsPattern = "(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
+        let sepPattern = "(?:-|–|—|to|through|thru)"
+        
+        // 1. Day1 - Day2 Month [Year] (e.g., 20-26 July, 20th to 26th July 2026)
+        let p1 = "(?i)\\b\(prefixPattern)(\\d{1,2})(?:st|nd|rd|th)?\\s*\(sepPattern)\\s*(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?\(monthsPattern)(?:[\\s,]+(\\d{4}))?\\b"
+        if let regex = try? NSRegularExpression(pattern: p1, options: []) {
+            let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+            if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+               let rD1 = Range(match.range(at: 1), in: text),
+               let rD2 = Range(match.range(at: 2), in: text),
+               let rM = Range(match.range(at: 3), in: text) {
+                
+                let d1 = Int(String(text[rD1])) ?? 1
+                let d2 = Int(String(text[rD2])) ?? 1
+                let monthStr = String(text[rM])
+                var yearStr: String? = nil
+                if match.range(at: 4).location != NSNotFound, let rY = Range(match.range(at: 4), in: text) {
+                    yearStr = String(text[rY])
+                }
+                
+                if let month = parseMonthString(monthStr) {
+                    let year = yearStr != nil ? Int(yearStr!) : nil
+                    let startDay = min(d1, d2)
+                    let endDay = max(d1, d2)
+                    if let start = createRangeDate(year: year, month: month, day: startDay, baseDate: baseDate),
+                       let end = createRangeDate(year: year, month: month, day: endDay, baseDate: baseDate) {
+                        return (start, end, match.range)
+                    }
+                }
+            }
+        }
+        
+        // 2. Month Day1 - Day2 [Year] (e.g., July 20-26, July 20th - 26th 2026)
+        let p2 = "(?i)\\b\(prefixPattern)\(monthsPattern)\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s*\(sepPattern)\\s*(\\d{1,2})(?:st|nd|rd|th)?(?:[\\s,]+(\\d{4}))?\\b"
+        if let regex = try? NSRegularExpression(pattern: p2, options: []) {
+            let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+            if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+               let rM = Range(match.range(at: 1), in: text),
+               let rD1 = Range(match.range(at: 2), in: text),
+               let rD2 = Range(match.range(at: 3), in: text) {
+                
+                let monthStr = String(text[rM])
+                let d1 = Int(String(text[rD1])) ?? 1
+                let d2 = Int(String(text[rD2])) ?? 1
+                var yearStr: String? = nil
+                if match.range(at: 4).location != NSNotFound, let rY = Range(match.range(at: 4), in: text) {
+                    yearStr = String(text[rY])
+                }
+                
+                if let month = parseMonthString(monthStr) {
+                    let year = yearStr != nil ? Int(yearStr!) : nil
+                    let startDay = min(d1, d2)
+                    let endDay = max(d1, d2)
+                    if let start = createRangeDate(year: year, month: month, day: startDay, baseDate: baseDate),
+                       let end = createRangeDate(year: year, month: month, day: endDay, baseDate: baseDate) {
+                        return (start, end, match.range)
+                    }
+                }
+            }
+        }
+        
+        // 3. Day1 Month1 - Day2 Month2 [Year] (e.g., 28 July - 3 August)
+        let p3 = "(?i)\\b\(prefixPattern)(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?\(monthsPattern)\\s*\(sepPattern)\\s*(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?\(monthsPattern)(?:[\\s,]+(\\d{4}))?\\b"
+        if let regex = try? NSRegularExpression(pattern: p3, options: []) {
+            let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+            if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+               let rD1 = Range(match.range(at: 1), in: text),
+               let rM1 = Range(match.range(at: 2), in: text),
+               let rD2 = Range(match.range(at: 3), in: text),
+               let rM2 = Range(match.range(at: 4), in: text) {
+                
+                let d1 = Int(String(text[rD1])) ?? 1
+                let monthStr1 = String(text[rM1])
+                let d2 = Int(String(text[rD2])) ?? 1
+                let monthStr2 = String(text[rM2])
+                var yearStr: String? = nil
+                if match.range(at: 5).location != NSNotFound, let rY = Range(match.range(at: 5), in: text) {
+                    yearStr = String(text[rY])
+                }
+                
+                if let m1 = parseMonthString(monthStr1), let m2 = parseMonthString(monthStr2) {
+                    let startYear = yearStr != nil ? Int(yearStr!) : nil
+                    if let start = createRangeDate(year: startYear, month: m1, day: d1, baseDate: baseDate) {
+                        let actualStartYear = calendar.component(.year, from: start)
+                        let endYear = (m2 < m1) ? actualStartYear + 1 : actualStartYear
+                        if let end = createRangeDate(year: endYear, month: m2, day: d2, baseDate: baseDate) {
+                            return (start, end, match.range)
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 4. Month1 Day1 - Month2 Day2 [Year] (e.g., July 28 - August 3)
+        let p4 = "(?i)\\b\(prefixPattern)\(monthsPattern)\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s*\(sepPattern)\\s*\(monthsPattern)\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:[\\s,]+(\\d{4}))?\\b"
+        if let regex = try? NSRegularExpression(pattern: p4, options: []) {
+            let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+            if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+               let rM1 = Range(match.range(at: 1), in: text),
+               let rD1 = Range(match.range(at: 2), in: text),
+               let rM2 = Range(match.range(at: 3), in: text),
+               let rD2 = Range(match.range(at: 4), in: text) {
+                
+                let monthStr1 = String(text[rM1])
+                let d1 = Int(String(text[rD1])) ?? 1
+                let monthStr2 = String(text[rM2])
+                let d2 = Int(String(text[rD2])) ?? 1
+                var yearStr: String? = nil
+                if match.range(at: 5).location != NSNotFound, let rY = Range(match.range(at: 5), in: text) {
+                    yearStr = String(text[rY])
+                }
+                
+                if let m1 = parseMonthString(monthStr1), let m2 = parseMonthString(monthStr2) {
+                    let startYear = yearStr != nil ? Int(yearStr!) : nil
+                    if let start = createRangeDate(year: startYear, month: m1, day: d1, baseDate: baseDate) {
+                        let actualStartYear = calendar.component(.year, from: start)
+                        let endYear = (m2 < m1) ? actualStartYear + 1 : actualStartYear
+                        if let end = createRangeDate(year: endYear, month: m2, day: d2, baseDate: baseDate) {
+                            return (start, end, match.range)
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 5. Numeric Date Range (DD/MM - DD/MM or DD/MM/YYYY - DD/MM/YYYY)
+        let p5 = "(?i)\\b\(prefixPattern)(\\d{1,2})[\\/\\.](\\d{1,2})(?:[\\/\\.](\\d{2,4}))?\\s*\(sepPattern)\\s*(\\d{1,2})[\\/\\.](\\d{1,2})(?:[\\/\\.](\\d{2,4}))?\\b"
+        if let regex = try? NSRegularExpression(pattern: p5, options: []) {
+            let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+            if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+               let rD1 = Range(match.range(at: 1), in: text),
+               let rM1 = Range(match.range(at: 2), in: text),
+               let rD2 = Range(match.range(at: 4), in: text),
+               let rM2 = Range(match.range(at: 5), in: text) {
+                
+                let d1 = Int(String(text[rD1])) ?? 1
+                let m1 = Int(String(text[rM1])) ?? 1
+                let d2 = Int(String(text[rD2])) ?? 1
+                let m2 = Int(String(text[rM2])) ?? 1
+                
+                var y1: Int? = nil
+                if match.range(at: 3).location != NSNotFound, let rY1 = Range(match.range(at: 3), in: text) {
+                    let yStr = String(text[rY1])
+                    y1 = Int(yStr)
+                    if let y = y1, y < 100 { y1 = 2000 + y }
+                }
+                var y2: Int? = nil
+                if match.range(at: 6).location != NSNotFound, let rY2 = Range(match.range(at: 6), in: text) {
+                    let yStr = String(text[rY2])
+                    y2 = Int(yStr)
+                    if let y = y2, y < 100 { y2 = 2000 + y }
+                }
+                
+                if let start = createRangeDate(year: y1, month: m1, day: d1, baseDate: baseDate) {
+                    let actualStartYear = calendar.component(.year, from: start)
+                    let targetEndYear = y2 ?? ((m2 < m1) ? actualStartYear + 1 : actualStartYear)
+                    if let end = createRangeDate(year: targetEndYear, month: m2, day: d2, baseDate: baseDate) {
+                        return (start, end, match.range)
+                    }
+                }
+            }
+        }
+        
+        return nil
+    }
+
     static func extractRecurrence(text: inout String, extractedRecurrenceStartDate: inout Date?, extractedDatePhrase: inout String?, allRecurrenceDates: inout [Date]) -> EKRecurrenceRule? {
         var matchedFrequency: EKRecurrenceFrequency?
         var matchedInterval: Int = 1
         var matchRangeToRemove: Range<String.Index>?
         var matchedDaysOfTheWeek: [EKRecurrenceDayOfWeek]? = nil
+        var recurrenceEnd: EKRecurrenceEnd? = nil
+        
+        if let dateRange = extractDateRange(text: text) {
+            matchedFrequency = .daily
+            matchedInterval = 1
+            recurrenceEnd = EKRecurrenceEnd(end: endOfDay(for: dateRange.endDate))
+            extractedRecurrenceStartDate = dateRange.startDate
+            allRecurrenceDates.append(dateRange.startDate)
+            allRecurrenceDates.append(dateRange.endDate)
+            if let range = Range(dateRange.range, in: text) {
+                matchRangeToRemove = range
+            }
+        }
         
         let dynamicPattern = "(?i)\\b(?:repeat\\s+)?every\\s+(\\d+)\\s+(day|week|month|year)s?\\b"
-        if let regex = try? NSRegularExpression(pattern: dynamicPattern, options: []) {
+        if matchedFrequency == nil, let regex = try? NSRegularExpression(pattern: dynamicPattern, options: []) {
             let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
             if let match = regex.firstMatch(in: text, options: [], range: nsRange) {
                 if let range = Range(match.range, in: text),
@@ -143,8 +372,6 @@ class TextParser {
             }
         }
         
-        var recurrenceEnd: EKRecurrenceEnd? = nil
-        
         // If still no frequency, check for standalone until / till / up untill / for X days patterns
         if matchedFrequency == nil {
             let untilPattern = "(?i)\\b(up\\s+un?till?|up\\s+to|until|un\\s+till|till|til|through|thru|ending\\s+on|ends\\s+on|expires\\s+on|expires|valid\\s+(?:till|until|through))\\b\\s+(.+)$"
@@ -161,8 +388,8 @@ class TextParser {
                         foundDate = rel.0
                         foundNSRange = rel.1
                     } else if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue),
-                              let dateMatch = detector.firstMatch(in: dateStr, options: [], range: NSRange(location: 0, length: dateStr.utf16.count)),
-                              let parsedDate = dateMatch.date {
+                               let dateMatch = detector.firstMatch(in: dateStr, options: [], range: NSRange(location: 0, length: dateStr.utf16.count)),
+                               let parsedDate = dateMatch.date {
                         foundDate = parsedDate
                         foundNSRange = dateMatch.range
                     }

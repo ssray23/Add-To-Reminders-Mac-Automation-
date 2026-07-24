@@ -130,6 +130,53 @@ struct RegressionTests {
         assertTest("Recurrence rule extracted", r13.recurrence != nil, "Recurrence was nil")
         assertTest("Recurrence title clean", r13.title == "Water plants", "Got '\(r13.title)'")
 
+        // 9. Date Range Parsing (Daily Recurrence)
+        print("\n--- 9. Date Range Parsing ---")
+        let r14 = TextParser.parse(text: "Chick’n’Rice with a FREE side of Pepe's Chilli Cheese Nuggets 20-26 july")
+        assertTest("Date range title clean", r14.title == "Chick’n’Rice with a FREE side of Pepe's Chilli Cheese Nuggets", "Got '\(r14.title)'")
+        assertTest("Date range recurrence exists", r14.recurrence != nil, "Recurrence was nil")
+        if let d = r14.date {
+            let day = calendar.component(.day, from: d)
+            let month = calendar.component(.month, from: d)
+            assertTest("Date range start date is July 20", day == 20 && month == 7, "Got day \(day), month \(month)")
+        } else {
+            assertTest("Date range start date exists", false, "Date was nil")
+        }
+        if let end = r14.recurrence?.recurrenceEnd?.endDate {
+            let endDay = calendar.component(.day, from: end)
+            let endMonth = calendar.component(.month, from: end)
+            assertTest("Date range end date is July 26", endDay == 26 && endMonth == 7, "Got end day \(endDay), month \(endMonth)")
+        } else {
+            assertTest("Date range recurrence end date exists", false, "End date was nil")
+        }
+
+        let r15 = TextParser.parse(text: "Chick’n’Rice with a FREE side of Pepe's Chilli Cheese Nuggets, available exclusively this week (20-26 July)")
+        assertTest("Date range in parens title clean", r15.title == "Chick’n’Rice with a FREE side of Pepe's Chilli Cheese Nuggets, available exclusively this week", "Got '\(r15.title)'")
+        assertTest("Date range in parens recurrence exists", r15.recurrence != nil, "Recurrence was nil")
+
+        let r16 = TextParser.parse(text: "Workout 20th - 26th July at 8am")
+        assertTest("Date range with explicit time title clean", r16.title == "Workout", "Got '\(r16.title)'")
+        if let d = r16.date {
+            let hour = calendar.component(.hour, from: d)
+            assertTest("Date range with 8am sets hour 8", hour == 8, "Got hour \(hour)")
+        }
+
+        let r17 = TextParser.parse(text: "Event July 20-26")
+        assertTest("Month-first date range title clean", r17.title == "Event", "Got '\(r17.title)'")
+        assertTest("Month-first date range recurrence exists", r17.recurrence != nil, "Recurrence was nil")
+
+        let r18 = TextParser.parse(text: "Festival 28 July - 3 August")
+        assertTest("Cross-month date range title clean", r18.title == "Festival", "Got '\(r18.title)'")
+        if let end = r18.recurrence?.recurrenceEnd?.endDate {
+            let endDay = calendar.component(.day, from: end)
+            let endMonth = calendar.component(.month, from: end)
+            assertTest("Cross-month date range end is Aug 3", endDay == 3 && endMonth == 8, "Got end day \(endDay), month \(endMonth)")
+        }
+
+        let r19 = TextParser.parse(text: "Meeting 20/07 - 26/07")
+        assertTest("Numeric date range title clean", r19.title == "Meeting", "Got '\(r19.title)'")
+        assertTest("Numeric date range recurrence exists", r19.recurrence != nil, "Recurrence was nil")
+
         print("==================================================")
         print("  SUMMARY: \(testsPassed) PASSED, \(testsFailed) FAILED")
         print("==================================================")
