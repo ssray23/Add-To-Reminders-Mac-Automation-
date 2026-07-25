@@ -209,11 +209,7 @@ struct QuickEntryView: View {
                 let dfOnly = DateFormatter()
                 dfOnly.dateStyle = .medium
                 dfOnly.timeStyle = .none
-                var startComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-                startComps.hour = 7
-                startComps.minute = 0
-                startComps.second = 0
-                let startDate = Calendar.current.date(from: startComps) ?? Date()
+                let startDate = parsedCombined.date ?? selDate
                 let startString = dateFormatter.string(from: startDate)
                 return "Will set due date: \(startString) (Repeats daily until \(dfOnly.string(from: selDate)))"
             } else {

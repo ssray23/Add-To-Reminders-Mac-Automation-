@@ -209,7 +209,7 @@ struct RegressionTests {
         print("  the main suite so they don't mask new regressions while unfixed.")
 
         let b1 = TextParser.parse(text: "Call Tony about the invoice")
-        assertKnownBug("Name 'Tony' preserved (not rewritten to 'today')", b1.title == "Call Tony about the invoice", "Got '\(b1.title)' — caused by typoFixes['tony'] = 'today'")
+        assertTest("Name 'Tony' preserved (not rewritten to 'today')", b1.title == "Call Tony about the invoice", "Got '\(b1.title)'")
 
         let b2 = TextParser.parse(text: "Buy 12 eggs")
         assertTest("Bare number '12' preserved in title", b2.title == "Buy 12 eggs", "Got '\(b2.title)'")
@@ -312,6 +312,25 @@ struct RegressionTests {
             assertTest("'daily for 4 days' recurrenceEnd exists", false, "recurrenceEnd was nil")
         }
 
+        let r29d = TextParser.parse(text: "Gruha Jyoti Registration on july 31 repeat daily for 6 days")
+        assertTest("Explicit start date + duration title clean", r29d.title == "Gruha Jyoti Registration", "Got '\(r29d.title)'")
+        assertTest("Explicit start date + duration recurrence exists", r29d.recurrence != nil, "Recurrence was nil")
+        assertTest("Explicit start date + duration single detected date count (1)", r29d.allDetectedDates.count == 1, "Got \(r29d.allDetectedDates.count) detected dates")
+        if let startDate = r29d.date {
+            let day = calendar.component(.day, from: startDate)
+            let month = calendar.component(.month, from: startDate)
+            assertTest("Explicit start date + duration start date is July 31", day == 31 && month == 7, "Got day \(day), month \(month)")
+        } else {
+            assertTest("Explicit start date + duration start date exists", false, "date was nil")
+        }
+        if let end = r29d.recurrence?.recurrenceEnd?.endDate {
+            let endDay = calendar.component(.day, from: end)
+            let endMonth = calendar.component(.month, from: end)
+            assertTest("Explicit start date + duration end date is August 6", endDay == 6 && endMonth == 8, "Got end day \(endDay), month \(endMonth)")
+        } else {
+            assertTest("Explicit start date + duration recurrenceEnd exists", false, "recurrenceEnd was nil")
+        }
+
         // 15. "Until <date>" Trailing Recurrence End
         print("\n--- 15. 'Until <date>' Trailing Recurrence End ---")
         let r30 = TextParser.parse(text: "Take medicine daily until next Friday")
@@ -319,18 +338,14 @@ struct RegressionTests {
         assertRecurrenceDetails("'daily until next Friday' -> daily, interval 1", r30.recurrence, frequency: .daily, interval: 1)
         assertTest("'daily until next Friday' has an end date", r30.recurrence?.recurrenceEnd?.endDate != nil, "recurrenceEnd was nil")
 
-        // This one specifically targets the buggy FIRST "until" branch in
-        // extractRecurrence (the one that assumes the date starts at
-        // dateStr's position 0). Padding text between "until" and the date
-        // should not corrupt the title or silently drop the recurrence.
         let r30b = TextParser.parse(text: "Follow up until sometime next Friday")
-        assertKnownBug("'until sometime next Friday' title not mangled", r30b.title == "Follow up", "Got '\(r30b.title)' — likely the mis-anchored range-removal bug in the first 'until' branch")
+        assertTest("'until sometime next Friday' title not mangled", r30b.title == "Follow up", "Got '\(r30b.title)'")
 
         // 16. Feedback Message Frequency Label
         print("\n--- 16. Feedback Message Frequency Label ---")
         let r31 = TextParser.parse(text: "Pay rent every month")
         if let msg = TextParser.formatParsedDateFeedback(r31) {
-            assertKnownBug("Monthly recurrence feedback doesn't say 'Repeats daily'", !msg.contains("Repeats daily"), "Got '\(msg)' — formatParsedDateFeedback hardcodes 'Repeats daily' for any rule")
+            assertTest("Monthly recurrence feedback doesn't say 'Repeats daily'", !msg.contains("Repeats daily"), "Got '\(msg)'")
         } else {
             assertTest("Monthly recurrence feedback exists", false, "formatParsedDateFeedback returned nil")
         }
