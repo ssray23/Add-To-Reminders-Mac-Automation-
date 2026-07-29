@@ -66,6 +66,8 @@ struct DateSelectionView: View {
     let onComplete: ((Date?) -> Void)
     
     @State private var selectedDate: Date?
+    @State private var selectedIndex: Int = 0
+    @State private var eventMonitor: Any? = nil
     
     private let dateFormatter: DateFormatter = {
         let df = DateFormatter()
@@ -81,24 +83,25 @@ struct DateSelectionView: View {
                 .foregroundColor(.primary)
             
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(dates, id: \.self) { date in
+                ForEach(Array(dates.enumerated()), id: \.offset) { index, date in
                     Button(action: {
+                        selectedIndex = index
                         selectedDate = date
                     }) {
                         HStack {
-                            Image(systemName: selectedDate == date ? "largecircle.fill.circle" : "circle")
-                                .foregroundColor(selectedDate == date ? .accentColor : .secondary)
+                            Image(systemName: selectedIndex == index ? "largecircle.fill.circle" : "circle")
+                                .foregroundColor(selectedIndex == index ? .accentColor : .secondary)
                             Text(dateFormatter.string(from: date))
                                 .font(.system(size: 16))
                                 .foregroundColor(.primary)
                             Spacer()
                         }
                         .padding(12)
-                        .background(Color(NSColor.textBackgroundColor).opacity(selectedDate == date ? 1.0 : 0.6))
+                        .background(Color(NSColor.textBackgroundColor).opacity(selectedIndex == index ? 1.0 : 0.6))
                         .cornerRadius(8)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.accentColor.opacity(selectedDate == date ? 1.0 : 0.0), lineWidth: 2)
+                                .stroke(Color.accentColor.opacity(selectedIndex == index ? 1.0 : 0.0), lineWidth: 2)
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -146,7 +149,51 @@ struct DateSelectionView: View {
         .onAppear {
             if let first = dates.first {
                 selectedDate = first
+                selectedIndex = 0
             }
+            setupKeyMonitor()
+        }
+        .onDisappear {
+            removeKeyMonitor()
+        }
+    }
+    
+    private func setupKeyMonitor() {
+        removeKeyMonitor()
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            switch event.keyCode {
+            case 125: // Down arrow
+                if !dates.isEmpty {
+                    selectedIndex = min(selectedIndex + 1, dates.count - 1)
+                    selectedDate = dates[selectedIndex]
+                }
+                return nil
+            case 126: // Up arrow
+                if !dates.isEmpty {
+                    selectedIndex = max(selectedIndex - 1, 0)
+                    selectedDate = dates[selectedIndex]
+                }
+                return nil
+            case 48: // Tab key
+                if !dates.isEmpty {
+                    if event.modifierFlags.contains(.shift) {
+                        selectedIndex = (selectedIndex - 1 + dates.count) % dates.count
+                    } else {
+                        selectedIndex = (selectedIndex + 1) % dates.count
+                    }
+                    selectedDate = dates[selectedIndex]
+                }
+                return nil
+            default:
+                return event
+            }
+        }
+    }
+    
+    private func removeKeyMonitor() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
         }
     }
 }

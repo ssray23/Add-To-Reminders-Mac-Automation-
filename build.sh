@@ -28,7 +28,7 @@ mkdir -p "$APP_DIR/Contents/Resources"
 
 # Run regression tests
 echo "Running automated regression tests..."
-swiftc source/TextParser.swift tests/RegressionTests.swift -o /tmp/regression_test_runner
+swiftc source/TextParser.swift source/QuickEntryNavigationHelper.swift tests/RegressionTests.swift -o /tmp/regression_test_runner
 /tmp/regression_test_runner
 rm -f /tmp/regression_test_runner
 
@@ -52,9 +52,16 @@ echo "Code signing..."
 xattr -cr "$APP_DIR"
 codesign --force --deep --sign - "$APP_DIR"
 
-# Notify Services system of new service
-echo "Updating dynamic services..."
-/System/Library/CoreServices/pbs -flush
+# Register with LaunchServices so Finder and Applications Dock stack index it
+echo "Registering with LaunchServices..."
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" 2>/dev/null || true
+
+# Also sync to /Applications if writable so global Applications Dock stack sees it
+if [ -w "/Applications" ]; then
+    rm -rf "/Applications/$APP_NAME.app"
+    cp -R "$APP_DIR" "/Applications/$APP_NAME.app"
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/$APP_NAME.app" 2>/dev/null || true
+fi
 
 echo "✅ Build complete! App installed to: $APP_DIR"
 echo "   Run it with: open \"$APP_DIR\""

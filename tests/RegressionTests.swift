@@ -410,6 +410,50 @@ struct RegressionTests {
         assertTest("No spurious date extracted from plain name", r39.date == nil, "Expected nil, got \(String(describing: r39.date))")
         assertTest("Title unchanged", r39.title == "Meet Sarah for coffee", "Got '\(r39.title)'")
 
+        // 24. Keyboard & Field Navigation State Tests
+        print("\n--- 24. Keyboard & Field Navigation State Tests ---")
+        let navInitial = QuickEntryNavigationHelper.nextField(from: nil, isShift: false, hasLists: true)
+        assertTest("Tab from unfocused (nil) -> date", navInitial == .date, "Got \(navInitial)")
+
+        let navTab1 = QuickEntryNavigationHelper.nextField(from: .title, isShift: false, hasLists: true)
+        assertTest("Tab from title -> date", navTab1 == .date, "Got \(navTab1)")
+
+        let navTab2 = QuickEntryNavigationHelper.nextField(from: .date, isShift: false, hasLists: true)
+        assertTest("Tab from date -> url", navTab2 == .url, "Got \(navTab2)")
+
+        let navTab3 = QuickEntryNavigationHelper.nextField(from: .url, isShift: false, hasLists: true)
+        assertTest("Tab from url -> list", navTab3 == .list, "Got \(navTab3)")
+
+        let navTab4 = QuickEntryNavigationHelper.nextField(from: .list, isShift: false, hasLists: true)
+        assertTest("Tab from list -> title (wrap)", navTab4 == .title, "Got \(navTab4)")
+
+        let navNoListsTab = QuickEntryNavigationHelper.nextField(from: .url, isShift: false, hasLists: false)
+        assertTest("Tab from url -> title when no lists (wrap)", navNoListsTab == .title, "Got \(navNoListsTab)")
+
+        let navShiftTab1 = QuickEntryNavigationHelper.nextField(from: .title, isShift: true, hasLists: true)
+        assertTest("Shift+Tab from title -> list (wrap)", navShiftTab1 == .list, "Got \(navShiftTab1)")
+
+        let navShiftTab2 = QuickEntryNavigationHelper.nextField(from: .list, isShift: true, hasLists: true)
+        assertTest("Shift+Tab from list -> url", navShiftTab2 == .url, "Got \(navShiftTab2)")
+
+        let navShiftTab3 = QuickEntryNavigationHelper.nextField(from: .url, isShift: true, hasLists: true)
+        assertTest("Shift+Tab from url -> date", navShiftTab3 == .date, "Got \(navShiftTab3)")
+
+        let navShiftTab4 = QuickEntryNavigationHelper.nextField(from: .date, isShift: true, hasLists: true)
+        assertTest("Shift+Tab from date -> title", navShiftTab4 == .title, "Got \(navShiftTab4)")
+
+        let idxDown = QuickEntryNavigationHelper.nextSelectionIndex(current: 0, delta: 1, total: 3)
+        assertTest("Down arrow selection index step (0 -> 1)", idxDown == 1, "Got \(idxDown)")
+
+        let idxClampMax = QuickEntryNavigationHelper.nextSelectionIndex(current: 2, delta: 1, total: 3)
+        assertTest("Down arrow selection clamped to max (2)", idxClampMax == 2, "Got \(idxClampMax)")
+
+        let idxUp = QuickEntryNavigationHelper.nextSelectionIndex(current: 2, delta: -1, total: 3)
+        assertTest("Up arrow selection index step (2 -> 1)", idxUp == 1, "Got \(idxUp)")
+
+        let idxClampMin = QuickEntryNavigationHelper.nextSelectionIndex(current: 0, delta: -1, total: 3)
+        assertTest("Up arrow selection clamped to min (0)", idxClampMin == 0, "Got \(idxClampMin)")
+
         // ============================================================
         // SUMMARY
         // ============================================================

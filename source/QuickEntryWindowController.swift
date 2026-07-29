@@ -81,12 +81,9 @@ struct QuickEntryView: View {
     
     let onComplete: (((title: String, dateText: String, selectedDate: Date?, url: String, listIdentifier: String?)?) -> Void)
     
-    enum Field {
-        case title
-        case date
-        case url
-    }
+    typealias Field = QuickEntryField
     @FocusState private var focusedField: Field?
+    @State private var eventMonitor: Any? = nil
     
     private let dateFormatter: DateFormatter = {
         let df = DateFormatter()
@@ -185,6 +182,50 @@ struct QuickEntryView: View {
         return dates.first
     }
     
+    @ViewBuilder
+    private var multipleDatesSection: some View {
+        if dynamicDetectedDates.count > 1 {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Multiple dates detected. Which one would you like to use?")
+                    .foregroundColor(.secondary)
+                
+                ForEach(0..<dynamicDetectedDates.count, id: \.self) { index in
+                    DateOptionRowView(
+                        isSelected: selectedIndex == index,
+                        isFocused: focusedField == .date,
+                        label: formatDateOptionLabel(dynamicDetectedDates[index]),
+                        action: { selectDateOption(at: index) }
+                    )
+                }
+                
+                if let feedback = parsedDateFeedback {
+                    Text(feedback)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+                }
+            }
+            .padding(8)
+            .background(focusedField == .date ? Color.accentColor.opacity(0.05) : Color.clear)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.accentColor.opacity(focusedField == .date ? 1.0 : 0.0), lineWidth: 2)
+            )
+            .focusable()
+            .hideSystemFocusRing()
+            .focused($focusedField, equals: .date)
+        }
+    }
+
+    private func selectDateOption(at index: Int) {
+        let dates = dynamicDetectedDates
+        guard index >= 0 && index < dates.count else { return }
+        selectedIndex = index
+        selectedDate = dates[index]
+        focusedField = .date
+    }
+    
     private func formatDateOptionLabel(_ date: Date) -> String {
         let titleTrimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
         let dateTrimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -196,6 +237,16 @@ struct QuickEntryView: View {
             return "\(formattedDate) (Repeats daily)"
         }
         return formattedDate
+    }
+    
+    private func dateOptionBorderOpacity(for index: Int) -> Double {
+        if focusedField == .date && selectedIndex == index {
+            return 1.0
+        } else if selectedIndex == index {
+            return 0.5
+        } else {
+            return 0.0
+        }
     }
     
     private var parsedDateFeedback: String? {
@@ -266,44 +317,15 @@ struct QuickEntryView: View {
                         selectedIndex = 0
                     }
                     fetchReminderLists()
+                    setupKeyMonitor()
                 }
-                
-            if dynamicDetectedDates.count > 1 {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Multiple dates detected. Which one would you like to use?")
-                        .foregroundColor(.secondary)
-                    
-                    ForEach(Array(dynamicDetectedDates.enumerated()), id: \.offset) { index, date in
-                        Button(action: {
-                            selectedIndex = index
-                            selectedDate = date
-                        }) {
-                            HStack {
-                                Image(systemName: selectedIndex == index ? "largecircle.fill.circle" : "circle")
-                                    .foregroundColor(selectedIndex == index ? .accentColor : .secondary)
-                                Text(formatDateOptionLabel(date))
-                                    .foregroundColor(.primary)
-                                Spacer()
-                            }
-                            .padding(8)
-                            .background(Color(NSColor.textBackgroundColor).opacity(selectedIndex == index ? 1.0 : 0.6))
-                            .cornerRadius(8)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.accentColor.opacity(selectedIndex == index ? 1.0 : 0.0), lineWidth: 2)
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                    
-                    if let feedback = parsedDateFeedback {
-                        Text(feedback)
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 4)
-                    }
+                .onDisappear {
+                    removeKeyMonitor()
                 }
-            } else {
+            
+            multipleDatesSection
+            
+            if dynamicDetectedDates.count <= 1 {
                 VStack(alignment: .leading, spacing: 6) {
                     TextField(datePlaceholder, text: $dateText)
                         .textFieldStyle(PlainTextFieldStyle())
@@ -365,6 +387,16 @@ struct QuickEntryView: View {
                 .padding(.vertical, 8)
                 .background(Color(NSColor.textBackgroundColor))
                 .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.accentColor.opacity(focusedField == .list ? 1.0 : 0.0), lineWidth: 2)
+                )
+                .focusable()
+                .hideSystemFocusRing()
+                .focused($focusedField, equals: .list)
+                .onTapGesture {
+                    focusedField = .list
+                }
             }
             
             HStack {
@@ -408,6 +440,61 @@ struct QuickEntryView: View {
         .cornerRadius(12)
     }
     
+    private func setupKeyMonitor() {
+        removeKeyMonitor()
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let isShift = event.modifierFlags.contains(.shift)
+            
+            switch event.keyCode {
+            case 48: // Tab key
+                handleTabKey(isShift: isShift)
+                return nil
+                
+            case 125: // Down arrow
+                if focusedField == .date && dynamicDetectedDates.count > 1 {
+                    selectedIndex = QuickEntryNavigationHelper.nextSelectionIndex(current: selectedIndex, delta: 1, total: dynamicDetectedDates.count)
+                    selectedDate = dynamicDetectedDates[selectedIndex]
+                    return nil
+                } else if focusedField == .list && !reminderLists.isEmpty {
+                    if let currentIndex = reminderLists.firstIndex(where: { $0.calendarIdentifier == selectedListIdentifier }) {
+                        let nextIndex = QuickEntryNavigationHelper.nextSelectionIndex(current: currentIndex, delta: 1, total: reminderLists.count)
+                        selectedListIdentifier = reminderLists[nextIndex].calendarIdentifier
+                    }
+                    return nil
+                }
+                return event
+                
+            case 126: // Up arrow
+                if focusedField == .date && dynamicDetectedDates.count > 1 {
+                    selectedIndex = QuickEntryNavigationHelper.nextSelectionIndex(current: selectedIndex, delta: -1, total: dynamicDetectedDates.count)
+                    selectedDate = dynamicDetectedDates[selectedIndex]
+                    return nil
+                } else if focusedField == .list && !reminderLists.isEmpty {
+                    if let currentIndex = reminderLists.firstIndex(where: { $0.calendarIdentifier == selectedListIdentifier }) {
+                        let prevIndex = QuickEntryNavigationHelper.nextSelectionIndex(current: currentIndex, delta: -1, total: reminderLists.count)
+                        selectedListIdentifier = reminderLists[prevIndex].calendarIdentifier
+                    }
+                    return nil
+                }
+                return event
+                
+            default:
+                return event
+            }
+        }
+    }
+    
+    private func removeKeyMonitor() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
+    }
+    
+    private func handleTabKey(isShift: Bool) {
+        focusedField = QuickEntryNavigationHelper.nextField(from: focusedField, isShift: isShift, hasLists: !reminderLists.isEmpty)
+    }
+    
     private func fetchReminderLists() {
         RemindersManager.shared.requestAccess { granted in
             if granted {
@@ -429,5 +516,61 @@ struct QuickEntryView: View {
         }
     }
 }
+
+struct DateOptionRowView: View {
+    let isSelected: Bool
+    let isFocused: Bool
+    let label: String
+    let action: () -> Void
+    
+    private var borderOpacity: Double {
+        if isFocused && isSelected {
+            return 1.0
+        } else if isSelected {
+            return 0.5
+        } else {
+            return 0.0
+        }
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                    .foregroundColor(isSelected ? .accentColor : .secondary)
+                Text(label)
+                    .foregroundColor(.primary)
+                Spacer()
+            }
+            .padding(8)
+            .background(Color(NSColor.textBackgroundColor).opacity(isSelected ? 1.0 : 0.6))
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.accentColor.opacity(borderOpacity), lineWidth: 2)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+struct HideFocusRingModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 14.0, *) {
+            content.focusEffectDisabled()
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func hideSystemFocusRing() -> some View {
+        self.modifier(HideFocusRingModifier())
+    }
+}
+
+
+
 
 
