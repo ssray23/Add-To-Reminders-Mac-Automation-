@@ -143,7 +143,7 @@ class TextParser {
         let calendar = Calendar.current
         let prefixPattern = "(?:\\b(?:from|between|during|valid|available|on)\\s+)?"
         let monthsPattern = "(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
-        let sepPattern = "(?:-|–|—|to|through|thru)"
+        let sepPattern = "(?:-|–|—|to|through|thru|and)"
         
         // 1. Day1 - Day2 Month [Year] (e.g., 20-26 July, 20th to 26th July 2026)
         let p1 = "(?i)\\b\(prefixPattern)(\\d{1,2})(?:st|nd|rd|th)?\\s*\(sepPattern)\\s*(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?\(monthsPattern)(?:[\\s,]+(\\d{4}))?\\b"
@@ -203,30 +203,41 @@ class TextParser {
             }
         }
         
-        // 3. Day1 Month1 - Day2 Month2 [Year] (e.g., 28 July - 3 August)
-        let p3 = "(?i)\\b\(prefixPattern)(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?\(monthsPattern)\\s*\(sepPattern)\\s*(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?\(monthsPattern)(?:[\\s,]+(\\d{4}))?\\b"
+        // 3. Day1 Month1 - Day2 Month2 [Year] (e.g., 28 July - 3 August, 1st September 2026 and 1st October 2026)
+        let p3 = "(?i)\\b\(prefixPattern)(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?\(monthsPattern)(?:[\\s,]+(\\d{4}))?\\s*\(sepPattern)\\s*(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?\(monthsPattern)(?:[\\s,]+(\\d{4}))?\\b"
         if let regex = try? NSRegularExpression(pattern: p3, options: []) {
             let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
             if let match = regex.firstMatch(in: text, options: [], range: nsRange),
                let rD1 = Range(match.range(at: 1), in: text),
                let rM1 = Range(match.range(at: 2), in: text),
-               let rD2 = Range(match.range(at: 3), in: text),
-               let rM2 = Range(match.range(at: 4), in: text) {
+               let rD2 = Range(match.range(at: 4), in: text),
+               let rM2 = Range(match.range(at: 5), in: text) {
                 
                 let d1 = Int(String(text[rD1])) ?? 1
                 let monthStr1 = String(text[rM1])
                 let d2 = Int(String(text[rD2])) ?? 1
                 let monthStr2 = String(text[rM2])
-                var yearStr: String? = nil
-                if match.range(at: 5).location != NSNotFound, let rY = Range(match.range(at: 5), in: text) {
-                    yearStr = String(text[rY])
+                var yearStr1: String? = nil
+                if match.range(at: 3).location != NSNotFound, let rY1 = Range(match.range(at: 3), in: text) {
+                    yearStr1 = String(text[rY1])
+                }
+                var yearStr2: String? = nil
+                if match.range(at: 6).location != NSNotFound, let rY2 = Range(match.range(at: 6), in: text) {
+                    yearStr2 = String(text[rY2])
                 }
                 
                 if let m1 = parseMonthString(monthStr1), let m2 = parseMonthString(monthStr2) {
-                    let startYear = yearStr != nil ? Int(yearStr!) : nil
+                    let startYear = yearStr1 != nil ? Int(yearStr1!) : (yearStr2 != nil ? Int(yearStr2!) : nil)
                     if let start = createRangeDate(year: startYear, month: m1, day: d1, baseDate: baseDate) {
                         let actualStartYear = calendar.component(.year, from: start)
-                        let endYear = (m2 < m1) ? actualStartYear + 1 : actualStartYear
+                        // Use yearStr2 if available; otherwise calculate relative year
+                        var endYear: Int
+                        if let ys2 = yearStr2, let y2 = Int(ys2) {
+                            endYear = y2
+                        } else {
+                            endYear = (m2 < m1) ? actualStartYear + 1 : actualStartYear
+                        }
+                        
                         if let end = createRangeDate(year: endYear, month: m2, day: d2, baseDate: baseDate) {
                             return (start, end, match.range)
                         }
@@ -235,30 +246,40 @@ class TextParser {
             }
         }
         
-        // 4. Month1 Day1 - Month2 Day2 [Year] (e.g., July 28 - August 3)
-        let p4 = "(?i)\\b\(prefixPattern)\(monthsPattern)\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s*\(sepPattern)\\s*\(monthsPattern)\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:[\\s,]+(\\d{4}))?\\b"
+        // 4. Month1 Day1 - Month2 Day2 [Year] (e.g., July 28 - August 3, September 1st 2026 and October 1st 2026)
+        let p4 = "(?i)\\b\(prefixPattern)\(monthsPattern)\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:[\\s,]+(\\d{4}))?\\s*\(sepPattern)\\s*\(monthsPattern)\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:[\\s,]+(\\d{4}))?\\b"
         if let regex = try? NSRegularExpression(pattern: p4, options: []) {
             let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
             if let match = regex.firstMatch(in: text, options: [], range: nsRange),
                let rM1 = Range(match.range(at: 1), in: text),
                let rD1 = Range(match.range(at: 2), in: text),
-               let rM2 = Range(match.range(at: 3), in: text),
-               let rD2 = Range(match.range(at: 4), in: text) {
+               let rM2 = Range(match.range(at: 4), in: text),
+               let rD2 = Range(match.range(at: 5), in: text) {
                 
                 let monthStr1 = String(text[rM1])
                 let d1 = Int(String(text[rD1])) ?? 1
                 let monthStr2 = String(text[rM2])
                 let d2 = Int(String(text[rD2])) ?? 1
-                var yearStr: String? = nil
-                if match.range(at: 5).location != NSNotFound, let rY = Range(match.range(at: 5), in: text) {
-                    yearStr = String(text[rY])
+                var yearStr1: String? = nil
+                if match.range(at: 3).location != NSNotFound, let rY1 = Range(match.range(at: 3), in: text) {
+                    yearStr1 = String(text[rY1])
+                }
+                var yearStr2: String? = nil
+                if match.range(at: 6).location != NSNotFound, let rY2 = Range(match.range(at: 6), in: text) {
+                    yearStr2 = String(text[rY2])
                 }
                 
                 if let m1 = parseMonthString(monthStr1), let m2 = parseMonthString(monthStr2) {
-                    let startYear = yearStr != nil ? Int(yearStr!) : nil
+                    let startYear = yearStr1 != nil ? Int(yearStr1!) : (yearStr2 != nil ? Int(yearStr2!) : nil)
                     if let start = createRangeDate(year: startYear, month: m1, day: d1, baseDate: baseDate) {
                         let actualStartYear = calendar.component(.year, from: start)
-                        let endYear = (m2 < m1) ? actualStartYear + 1 : actualStartYear
+                        var endYear: Int
+                        if let ys2 = yearStr2, let y2 = Int(ys2) {
+                            endYear = y2
+                        } else {
+                            endYear = (m2 < m1) ? actualStartYear + 1 : actualStartYear
+                        }
+                        
                         if let end = createRangeDate(year: endYear, month: m2, day: d2, baseDate: baseDate) {
                             return (start, end, match.range)
                         }

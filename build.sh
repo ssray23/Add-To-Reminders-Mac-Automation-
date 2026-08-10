@@ -35,11 +35,6 @@ rm -f /tmp/regression_test_runner
 # Compile Swift files
 echo "Compiling Swift files..."
 swiftc source/*.swift -o "$MACOS_DIR/$APP_NAME" -target arm64-apple-macosx12.0
-
-# Copy Reminders icon
-echo "Copying App Icon..."
-cp /System/Applications/Reminders.app/Contents/Resources/AppIcon.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
-
 # Copy Info.plist
 echo "Copying Info.plist..."
 cp Info.plist "$APP_DIR/Contents/Info.plist"
@@ -52,6 +47,18 @@ echo "Code signing..."
 xattr -cr "$APP_DIR"
 codesign --force --deep --sign - "$APP_DIR"
 
+echo "🎨 Applying custom icon natively via Swift..."
+cat << 'EOF' > set_icon.swift
+import Cocoa
+let args = CommandLine.arguments
+guard args.count >= 3, let img = NSImage(contentsOfFile: args[1]) else { exit(1) }
+let success = NSWorkspace.shared.setIcon(img, forFile: args[2], options: [])
+if !success { exit(1) }
+EOF
+
+swift set_icon.swift "CustomIcon.png" "$APP_DIR"
+rm set_icon.swift
+
 # Register with LaunchServices so Finder and Applications Dock stack index it
 echo "Registering with LaunchServices..."
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" 2>/dev/null || true
@@ -60,7 +67,9 @@ echo "Registering with LaunchServices..."
 if [ -w "/Applications" ]; then
     rm -rf "/Applications/$APP_NAME.app"
     cp -R "$APP_DIR" "/Applications/$APP_NAME.app"
+    touch "/Applications/$APP_NAME.app"
     /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/$APP_NAME.app" 2>/dev/null || true
+    killall Dock 2>/dev/null || true
 fi
 
 echo "✅ Build complete! App installed to: $APP_DIR"

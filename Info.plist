@@ -3,9 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.example.AddToRemindersSwift</string>
+    <string>com.suddharay.AddToReminders</string>
     <key>CFBundleName</key>
     <string>AddToReminders</string>
+    <key>CFBundleDisplayName</key>
+    <string>Add to Reminders</string>
     <key>CFBundleExecutable</key>
     <string>AddToReminders</string>
     <key>CFBundleIconFile</key>
@@ -13,11 +15,15 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>1.3</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>6</string>
     <key>LSUIElement</key>
-    <true/>
+    <false/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
     <key>NSServices</key>
     <array>
         <dict>

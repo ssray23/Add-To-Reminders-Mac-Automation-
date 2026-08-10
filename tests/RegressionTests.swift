@@ -203,6 +203,30 @@ struct RegressionTests {
         assertTest("Numeric date range title clean", r19.title == "Meeting", "Got '\(r19.title)'")
         assertTest("Numeric date range recurrence exists", r19.recurrence != nil, "Recurrence was nil")
 
+        let r19b = TextParser.parse(text: "get £5 cashback between 1st September 2026 and 1st October 2026")
+        assertTest("Between/and date range with years title clean", r19b.title == "get £5 cashback", "Got '\(r19b.title)'")
+        assertTest("Between/and date range recurrence exists", r19b.recurrence != nil, "Recurrence was nil")
+        if let d = r19b.date {
+            let day = calendar.component(.day, from: d)
+            let month = calendar.component(.month, from: d)
+            let year = calendar.component(.year, from: d)
+            assertTest("Between/and start date is Sep 1 2026", day == 1 && month == 9 && year == 2026, "Got \(year)-\(month)-\(day)")
+        }
+        if let end = r19b.recurrence?.recurrenceEnd?.endDate {
+            let endDay = calendar.component(.day, from: end)
+            let endMonth = calendar.component(.month, from: end)
+            let endYear = calendar.component(.year, from: end)
+            assertTest("Between/and end date is Oct 1 2026", endDay == 1 && endMonth == 10 && endYear == 2026, "Got \(endYear)-\(endMonth)-\(endDay)")
+        }
+
+        let r19c = TextParser.parse(text: "offer valid between September 1 2026 and October 1 2026")
+        assertTest("Between/and pattern 4 title clean", r19c.title == "offer valid", "Got '\(r19c.title)'")
+        assertTest("Between/and pattern 4 recurrence exists", r19c.recurrence != nil, "Recurrence was nil")
+
+        let r19d = TextParser.parse(text: "Booking available 28 July and 3 August")
+        assertTest("Cross-month with 'and' title clean", r19d.title == "Booking", "Got '\(r19d.title)'")
+        assertTest("Cross-month with 'and' recurrence exists", r19d.recurrence != nil, "Recurrence was nil")
+
         // 10. KNOWN BUG REGRESSIONS - name & bare-number corruption
         print("\n--- 10. KNOWN BUG REGRESSIONS (Name / Bare Number Corruption) ---")
         print("  These document bugs found in code review. Tracked separately from")
