@@ -478,6 +478,54 @@ struct RegressionTests {
         let idxClampMin = QuickEntryNavigationHelper.nextSelectionIndex(current: 0, delta: -1, total: 3)
         assertTest("Up arrow selection clamped to min (0)", idxClampMin == 0, "Got \(idxClampMin)")
 
+        // 25. "Valid Until" / "Offer Until" Start Date Anchoring
+        print("\n--- 25. 'Valid Until' / 'Offer Until' Start Date Anchoring ---")
+
+        // Simulates the McDonald's email: "Offer only valid until 16th August"
+        let r40 = TextParser.parse(text: "9 Chicken McNuggets and Medium Fries for just £2.99. only. Bag that deal Offer only valid until 16th August")
+        assertTest("'valid until' recurrence exists", r40.recurrence != nil, "Recurrence was nil")
+        if let startDate = r40.date {
+            assertTest("'valid until' start date is today (not after end)", calendar.isDate(startDate, inSameDayAs: Date()), "Got \(formatter.string(from: startDate))")
+            let hour = calendar.component(.hour, from: startDate)
+            assertTest("'valid until' defaults to 7:00 AM", hour == 7, "Got hour \(hour)")
+        } else {
+            assertTest("'valid until' start date exists", false, "date was nil")
+        }
+        if let end = r40.recurrence?.recurrenceEnd?.endDate {
+            let endDay = calendar.component(.day, from: end)
+            let endMonth = calendar.component(.month, from: end)
+            assertTest("'valid until' end date is Aug 16", endDay == 16 && endMonth == 8, "Got end day \(endDay), month \(endMonth)")
+        } else {
+            assertTest("'valid until' recurrenceEnd exists", false, "recurrenceEnd was nil")
+        }
+
+        // Simpler "until <date>" with no explicit recurrence keyword
+        let r41 = TextParser.parse(text: "Special offer until 20th August")
+        assertTest("'until' alone recurrence exists", r41.recurrence != nil, "Recurrence was nil")
+        if let startDate = r41.date {
+            assertTest("'until' alone start date is today", calendar.isDate(startDate, inSameDayAs: Date()), "Got \(formatter.string(from: startDate))")
+        } else {
+            assertTest("'until' alone start date exists", false, "date was nil")
+        }
+
+        // "expires 16th August" variant
+        let r42 = TextParser.parse(text: "Discount expires 16th August")
+        assertTest("'expires' recurrence exists", r42.recurrence != nil, "Recurrence was nil")
+        if let startDate = r42.date {
+            assertTest("'expires' start date is today", calendar.isDate(startDate, inSameDayAs: Date()), "Got \(formatter.string(from: startDate))")
+        } else {
+            assertTest("'expires' start date exists", false, "date was nil")
+        }
+
+        // Test overriding bug (another date in text shouldn't override the recurrence start)
+        let r43 = TextParser.parse(text: "Offer valid until 16th August. 6 days only.")
+        assertTest("'valid until' + '6 days' recurrence exists", r43.recurrence != nil, "Recurrence was nil")
+        if let startDate = r43.date {
+            assertTest("'valid until' + '6 days' start date is today (not Aug 17)", calendar.isDate(startDate, inSameDayAs: Date()), "Got \(formatter.string(from: startDate))")
+        } else {
+            assertTest("'valid until' + '6 days' start date exists", false, "date was nil")
+        }
+
         // ============================================================
         // SUMMARY
         // ============================================================

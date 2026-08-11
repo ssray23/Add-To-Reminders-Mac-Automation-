@@ -448,14 +448,22 @@ class TextParser {
                         let matchedSubtext = foundNSRange != nil ? String(dateStr[Range(foundNSRange!, in: dateStr)!]) : dateStr
                         let hasExplicitTime = matchedSubtext.range(of: "(?i)(\\b\\d{1,2}(?::\\d{2})?\\s*(?:am|pm|a\\.m\\.|p\\.m\\.)\\b|\\b\\d{1,2}:\\d{2}\\b|\\bat\\s+\\d+|\\bnoon\\b|\\bmidnight\\b)", options: .regularExpression) != nil
                         
+                        // Always anchor the start date to today so the
+                        // recurrence runs from now until the target date.
+                        // Without this, later date detection (e.g. "6 days")
+                        // could push the start PAST the end date.
+                        var startComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
                         if hasExplicitTime {
                             let targetComps = Calendar.current.dateComponents([.hour, .minute, .second], from: targetDate)
-                            var startComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
                             startComps.hour = targetComps.hour
                             startComps.minute = targetComps.minute
                             startComps.second = targetComps.second
-                            extractedRecurrenceStartDate = Calendar.current.date(from: startComps)
+                        } else {
+                            startComps.hour = 7
+                            startComps.minute = 0
+                            startComps.second = 0
                         }
+                        extractedRecurrenceStartDate = Calendar.current.date(from: startComps)
                         
             let matchedEndInText = foundNSRange != nil ? match.range(at: 2).location + foundNSRange!.location + foundNSRange!.length : match.range(at: 2).location + dateStr.utf16.count
             let removeNSRange = NSRange(location: match.range.lowerBound, length: matchedEndInText - match.range.lowerBound)
@@ -1077,7 +1085,24 @@ class TextParser {
             group.0.year != nil || group.0.month != nil || group.0.day != nil
         }
         
-        if hasExplicitTextDate, let firstExplicitDate = allDetectedDates.first {
+        let isFloatingRecurrenceStart = extractedRecurrenceDaysCount != nil
+        
+        if let recStart = extractedRecurrenceStartDate, recurrenceRule != nil, !isFloatingRecurrenceStart {
+            if let firstDate = allDetectedDates.first {
+                var recComps = Calendar.current.dateComponents([.year, .month, .day], from: recStart)
+                let timeComps = Calendar.current.dateComponents([.hour, .minute, .second], from: firstDate)
+                recComps.hour = timeComps.hour
+                recComps.minute = timeComps.minute
+                recComps.second = timeComps.second
+                if let mergedRecStart = Calendar.current.date(from: recComps) {
+                    extractedDate = mergedRecStart
+                    allDetectedDates = [mergedRecStart]
+                }
+            } else {
+                extractedDate = recStart
+                allDetectedDates = [recStart]
+            }
+        } else if hasExplicitTextDate, let firstExplicitDate = allDetectedDates.first {
             extractedDate = firstExplicitDate
             
             if let daysCount = extractedRecurrenceDaysCount, let rule = recurrenceRule {
