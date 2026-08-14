@@ -329,6 +329,94 @@ class TextParser {
         return nil
     }
 
+    private static func parseDayOfWeek(_ string: String) -> EKWeekday? {
+        let s = string.lowercased().trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        switch s {
+        case "sun", "sunday", "sundays":
+            return .sunday
+        case "mon", "monday", "mondays", "mons":
+            return .monday
+        case "tue", "tues", "tuesday", "tuesdays":
+            return .tuesday
+        case "wed", "weds", "wednesday", "wednesdays":
+            return .wednesday
+        case "thu", "thur", "thurs", "thursday", "thursdays":
+            return .thursday
+        case "fri", "friday", "fridays":
+            return .friday
+        case "sat", "saturday", "saturdays":
+            return .saturday
+        default:
+            return nil
+        }
+    }
+
+    static func calculateWeekdayTarget(from baseDate: Date, targetDays: [EKWeekday]) -> Date {
+        let calendar = Calendar.current
+        let currentWeekday = calendar.component(.weekday, from: baseDate) // 1 = Sun .. 7 = Sat
+        
+        var minDiff = Int.max
+        for day in targetDays {
+            let targetRaw = day.rawValue // 1 = Sun .. 7 = Sat
+            let diff = (targetRaw - currentWeekday + 7) % 7
+            if diff < minDiff {
+                minDiff = diff
+            }
+        }
+        
+        let daysToAdd = (minDiff == Int.max) ? 0 : minDiff
+        let targetDay = calendar.date(byAdding: .day, value: daysToAdd, to: baseDate) ?? baseDate
+        
+        var comps = calendar.dateComponents([.year, .month, .day], from: targetDay)
+        comps.hour = 7
+        comps.minute = 0
+        comps.second = 0
+        return calendar.date(from: comps) ?? targetDay
+    }
+
+    private static func parseDaysOfWeekList(from text: String) -> [EKRecurrenceDayOfWeek]? {
+        let singleDayToken = "(?:mon(?:day)?(?:s)?|mons|tue(?:s(?:day)?)?(?:s)?|wed(?:nesday|s)?(?:s)?|thu(?:r(?:s(?:day)?)?)?(?:s)?|fri(?:day)?(?:s)?|sat(?:urday)?(?:s)?|sun(?:day)?(?:s)?)"
+        let rangePattern = "(?i)\\b(\(singleDayToken))\\s*(?:-|–|—|to|through|thru)\\s*(\(singleDayToken))\\b"
+        if let rangeRegex = try? NSRegularExpression(pattern: rangePattern, options: []),
+           let match = rangeRegex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: text.utf16.count)),
+           let r1 = Range(match.range(at: 1), in: text),
+           let r2 = Range(match.range(at: 2), in: text),
+           let d1 = parseDayOfWeek(String(text[r1])),
+           let d2 = parseDayOfWeek(String(text[r2])) {
+            
+            var weekdays: [EKWeekday] = []
+            var current = d1.rawValue
+            let end = d2.rawValue
+            while true {
+                if let w = EKWeekday(rawValue: current) {
+                    weekdays.append(w)
+                }
+                if current == end { break }
+                current = (current % 7) + 1
+            }
+            return weekdays.map { EKRecurrenceDayOfWeek($0) }
+        }
+        
+        let dayRegexPattern = "(?i)\\b(\(singleDayToken))\\b"
+        guard let dayRegex = try? NSRegularExpression(pattern: dayRegexPattern, options: []) else { return nil }
+        let matches = dayRegex.matches(in: text, options: [], range: NSRange(location: 0, length: text.utf16.count))
+        guard !matches.isEmpty else { return nil }
+        
+        var seen: Set<Int> = []
+        var result: [EKRecurrenceDayOfWeek] = []
+        
+        for m in matches {
+            if let r = Range(m.range, in: text), let day = parseDayOfWeek(String(text[r])) {
+                if !seen.contains(day.rawValue) {
+                    seen.insert(day.rawValue)
+                    result.append(EKRecurrenceDayOfWeek(day))
+                }
+            }
+        }
+        
+        return result.isEmpty ? nil : result
+    }
+
     static func extractRecurrence(text: inout String, extractedRecurrenceStartDate: inout Date?, extractedDatePhrase: inout String?, allRecurrenceDates: inout [Date], extractedRecurrenceDaysCount: inout Int?) -> EKRecurrenceRule? {
         var matchedFrequency: EKRecurrenceFrequency?
         var matchedInterval: Int = 1
@@ -348,7 +436,7 @@ class TextParser {
             }
         }
         
-        let dynamicPattern = "(?i)\\b(?:repeat\\s+)?every\\s+(\\d+)\\s+(day|week|month|year)s?\\b"
+        let dynamicPattern = "(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?every\\s+(\\d+)\\s+(day|week|month|year)s?\\b"
         if matchedFrequency == nil, let regex = try? NSRegularExpression(pattern: dynamicPattern, options: []) {
             let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
             if let match = regex.firstMatch(in: text, options: [], range: nsRange) {
@@ -372,28 +460,180 @@ class TextParser {
             }
         }
         
+        let singleDayToken = "(?:mon(?:day)?(?:s)?|mons|tue(?:s(?:day)?)?(?:s)?|wed(?:nesday|s)?(?:s)?|thu(?:r(?:s(?:day)?)?)?(?:s)?|fri(?:day)?(?:s)?|sat(?:urday)?(?:s)?|sun(?:day)?(?:s)?)"
+        let dayListToken = "(?:\(singleDayToken))(?:(?:\\s*,\\s*|\\s+(?:and|&|to|-|–|—|through|thru)\\s+)\(singleDayToken))*"
+        
+        if matchedFrequency == nil {
+            // Every other <day> (e.g. every other friday)
+            let everyOtherDayPattern = "(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?every\\s*other\\s*(\(singleDayToken))\\b"
+            if let regex = try? NSRegularExpression(pattern: everyOtherDayPattern, options: []) {
+                let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+                if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+                   let range = Range(match.range, in: text),
+                   let dayGroupRange = Range(match.range(at: 1), in: text),
+                   let days = parseDaysOfWeekList(from: String(text[dayGroupRange])) {
+                    matchedFrequency = .weekly
+                    matchedInterval = 2
+                    matchedDaysOfTheWeek = days
+                    matchRangeToRemove = range
+                    if extractedRecurrenceStartDate == nil {
+                        let rawWeekdays = days.map { $0.dayOfTheWeek }
+                        let target = calculateWeekdayTarget(from: Date(), targetDays: rawWeekdays)
+                        extractedRecurrenceStartDate = target
+                        allRecurrenceDates.append(target)
+                    }
+                }
+            }
+        }
+        
+        if matchedFrequency == nil {
+            // Every <N> weeks on <days>
+            let everyNWeeksDayPattern = "(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?every\\s+(\\d+)\\s+weeks?\\s+(?:on\\s+)?(\(dayListToken))\\b"
+            if let regex = try? NSRegularExpression(pattern: everyNWeeksDayPattern, options: []) {
+                let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+                if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+                   let range = Range(match.range, in: text),
+                   let numRange = Range(match.range(at: 1), in: text),
+                   let dayGroupRange = Range(match.range(at: 2), in: text),
+                   let days = parseDaysOfWeekList(from: String(text[dayGroupRange])) {
+                    let num = Int(String(text[numRange])) ?? 1
+                    matchedFrequency = .weekly
+                    matchedInterval = num
+                    matchedDaysOfTheWeek = days
+                    matchRangeToRemove = range
+                    if extractedRecurrenceStartDate == nil {
+                        let rawWeekdays = days.map { $0.dayOfTheWeek }
+                        let target = calculateWeekdayTarget(from: Date(), targetDays: rawWeekdays)
+                        extractedRecurrenceStartDate = target
+                        allRecurrenceDates.append(target)
+                    }
+                }
+            }
+        }
+        
+        if matchedFrequency == nil {
+            // Every <N> <day>s (e.g., every 2 fridays)
+            let everyNDaysPattern = "(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?every\\s+(\\d+)\\s*(\(singleDayToken))\\b"
+            if let regex = try? NSRegularExpression(pattern: everyNDaysPattern, options: []) {
+                let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+                if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+                   let range = Range(match.range, in: text),
+                   let numRange = Range(match.range(at: 1), in: text),
+                   let dayGroupRange = Range(match.range(at: 2), in: text),
+                   let days = parseDaysOfWeekList(from: String(text[dayGroupRange])) {
+                    let num = Int(String(text[numRange])) ?? 1
+                    matchedFrequency = .weekly
+                    matchedInterval = num
+                    matchedDaysOfTheWeek = days
+                    matchRangeToRemove = range
+                    if extractedRecurrenceStartDate == nil {
+                        let rawWeekdays = days.map { $0.dayOfTheWeek }
+                        let target = calculateWeekdayTarget(from: Date(), targetDays: rawWeekdays)
+                        extractedRecurrenceStartDate = target
+                        allRecurrenceDates.append(target)
+                    }
+                }
+            }
+        }
+        
+        if matchedFrequency == nil {
+            // Every <day(s)> (e.g. every Fri, every Friday, every Mon and Wed, repeat every Friday)
+            let everyDayPattern = "(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?every\\s+(\(dayListToken))\\b"
+            if let regex = try? NSRegularExpression(pattern: everyDayPattern, options: []) {
+                let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+                if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+                   let range = Range(match.range, in: text),
+                   let dayGroupRange = Range(match.range(at: 1), in: text),
+                   let days = parseDaysOfWeekList(from: String(text[dayGroupRange])) {
+                    matchedFrequency = .weekly
+                    matchedInterval = 1
+                    matchedDaysOfTheWeek = days
+                    matchRangeToRemove = range
+                    if extractedRecurrenceStartDate == nil {
+                        let rawWeekdays = days.map { $0.dayOfTheWeek }
+                        let target = calculateWeekdayTarget(from: Date(), targetDays: rawWeekdays)
+                        extractedRecurrenceStartDate = target
+                        allRecurrenceDates.append(target)
+                    }
+                }
+            }
+        }
+        
+        if matchedFrequency == nil {
+            // Repeat on <day(s)> (e.g. repeat on Friday, repeats on Fridays, repeating on Mon and Wed)
+            let repeatOnDayPattern = "(?i)\\b(?:repeat|repeats|repeating)\\s+on\\s+(\(dayListToken))\\b"
+            if let regex = try? NSRegularExpression(pattern: repeatOnDayPattern, options: []) {
+                let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+                if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+                   let range = Range(match.range, in: text),
+                   let dayGroupRange = Range(match.range(at: 1), in: text),
+                   let days = parseDaysOfWeekList(from: String(text[dayGroupRange])) {
+                    matchedFrequency = .weekly
+                    matchedInterval = 1
+                    matchedDaysOfTheWeek = days
+                    matchRangeToRemove = range
+                    if extractedRecurrenceStartDate == nil {
+                        let rawWeekdays = days.map { $0.dayOfTheWeek }
+                        let target = calculateWeekdayTarget(from: Date(), targetDays: rawWeekdays)
+                        extractedRecurrenceStartDate = target
+                        allRecurrenceDates.append(target)
+                    }
+                }
+            }
+        }
+        
+        if matchedFrequency == nil {
+            // On <plural day(s) / multi-day> (e.g. on Fridays, on Mondays and Wednesdays)
+            let onPluralDaysPattern = "(?i)\\bon\\s+(\(dayListToken))\\b"
+            if let regex = try? NSRegularExpression(pattern: onPluralDaysPattern, options: []) {
+                let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+                if let match = regex.firstMatch(in: text, options: [], range: nsRange),
+                   let range = Range(match.range, in: text),
+                   let dayGroupRange = Range(match.range(at: 1), in: text),
+                   let days = parseDaysOfWeekList(from: String(text[dayGroupRange])) {
+                    let dayGroupText = String(text[dayGroupRange])
+                    let pluralDayPattern = "(?i)\\b(mon(?:day)?s|tue(?:s(?:day)?)?s|wed(?:nesday|s)?s|thu(?:r(?:s(?:day)?)?)?s|fri(?:day)?s|sat(?:urday)?s|sun(?:day)?s)\\b"
+                    let hasPlural = dayGroupText.range(of: pluralDayPattern, options: .regularExpression) != nil
+                    let hasMultiple = days.count > 1
+                    
+                    if hasMultiple || hasPlural {
+                        matchedFrequency = .weekly
+                        matchedInterval = 1
+                        matchedDaysOfTheWeek = days
+                        matchRangeToRemove = range
+                        if extractedRecurrenceStartDate == nil {
+                            let rawWeekdays = days.map { $0.dayOfTheWeek }
+                            let target = calculateWeekdayTarget(from: Date(), targetDays: rawWeekdays)
+                            extractedRecurrenceStartDate = target
+                            allRecurrenceDates.append(target)
+                        }
+                    }
+                }
+            }
+        }
+        
         if matchedFrequency == nil {
             let patterns: [(regex: String, frequency: EKRecurrenceFrequency, interval: Int, daysOfTheWeek: [EKRecurrenceDayOfWeek]?)] = [
-                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*day\\b", .daily, 2, nil),
-                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*week\\b", .weekly, 2, nil),
-                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*month\\b", .monthly, 2, nil),
-                ("(?i)\\b(?:repeat\\s+)?every\\s*other\\s*year\\b", .yearly, 2, nil),
-                ("(?i)\\b(?:repeat\\s+)?(?:on\\s+)?(?:weekdays|every\\s+weekday)\\b", .weekly, 1, [
+                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?every\\s*other\\s*day\\b", .daily, 2, nil),
+                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?every\\s*other\\s*week\\b", .weekly, 2, nil),
+                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?every\\s*other\\s*month\\b", .monthly, 2, nil),
+                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?every\\s*other\\s*year\\b", .yearly, 2, nil),
+                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?(?:on\\s+)?(?:weekdays|every\\s+weekday)\\b", .weekly, 1, [
                     EKRecurrenceDayOfWeek(.monday),
                     EKRecurrenceDayOfWeek(.tuesday),
                     EKRecurrenceDayOfWeek(.wednesday),
                     EKRecurrenceDayOfWeek(.thursday),
                     EKRecurrenceDayOfWeek(.friday)
                 ]),
-                ("(?i)\\b(?:repeat\\s+)?(?:on\\s+)?(?:weekends|every\\s+weekend)\\b", .weekly, 1, [
+                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?(?:on\\s+)?(?:weekends|every\\s+weekend)\\b", .weekly, 1, [
                     EKRecurrenceDayOfWeek(.saturday),
                     EKRecurrenceDayOfWeek(.sunday)
                 ]),
-                ("(?i)\\b(?:repeat\\s+)?(every\\s*day|daily)\\b", .daily, 1, nil),
-                ("(?i)\\b(?:repeat\\s+)?(every\\s*week|weekly)\\b", .weekly, 1, nil),
-                ("(?i)\\b(?:repeat\\s+)?(every\\s*month|monthly)\\b", .monthly, 1, nil),
-                ("(?i)\\b(?:repeat\\s+)?(every\\s*year|yearly)\\b", .yearly, 1, nil),
-                ("(?i)\\b(repeat)\\b(?=\\s+(?:for|until|ending|ends))", .daily, 1, nil)
+                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?(every\\s*day|daily)\\b", .daily, 1, nil),
+                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?(every\\s*week|weekly)\\b", .weekly, 1, nil),
+                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?(every\\s*month|monthly)\\b", .monthly, 1, nil),
+                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?(every\\s*year|yearly)\\b", .yearly, 1, nil),
+                ("(?i)\\b(repeat|repeats|repeating)\\b(?=\\s+(?:for|until|ending|ends))", .daily, 1, nil)
             ]
             
             for item in patterns {
@@ -407,7 +647,9 @@ class TextParser {
                             matchedDaysOfTheWeek = item.daysOfTheWeek
                             if item.daysOfTheWeek?.contains(where: { $0.dayOfTheWeek == .saturday || $0.dayOfTheWeek == .sunday }) == true {
                                 if extractedRecurrenceStartDate == nil {
-                                    extractedRecurrenceStartDate = calculateWeekendTarget(from: Date(), isNextWeekend: false)
+                                    let target = calculateWeekendTarget(from: Date(), isNextWeekend: false)
+                                    extractedRecurrenceStartDate = target
+                                    allRecurrenceDates.append(target)
                                 }
                             }
                             break
@@ -881,8 +1123,6 @@ class TextParser {
         for (word, number) in ordinalFixes {
             cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "\\b\(word)\\b", with: number, options: [.regularExpression, .caseInsensitive])
         }
-        
-        cleanOriginalText = cleanOriginalText.replacingOccurrences(of: "(?i)\\(\\s*repeats?\\s*[^\\)]*\\)", with: "", options: .regularExpression)
         
         var extractedRecurrenceStartDate: Date? = nil
         var extractedDatePhrase: String? = nil

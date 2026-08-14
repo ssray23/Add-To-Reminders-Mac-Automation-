@@ -292,6 +292,75 @@ struct RegressionTests {
             assertTest("'weekends' daysOfTheWeek exists", false, "daysOfTheWeek was nil")
         }
 
+        // Specific Day of Week Recurrence (e.g., 'every Fri', 'every Friday')
+        let r28b = TextParser.parse(text: "All Mains and Doner Boxes only £5 every Fri")
+        assertTest("'every Fri' title clean", r28b.title == "All Mains and Doner Boxes only £5", "Got '\(r28b.title)'")
+        assertTest("'every Fri' recurrence exists", r28b.recurrence != nil, "Recurrence was nil")
+        assertRecurrenceDetails("'every Fri' -> weekly, interval 1", r28b.recurrence, frequency: .weekly, interval: 1)
+        if let days = r28b.recurrence?.daysOfTheWeek {
+            assertTest("'every Fri' produces Friday", days.count == 1 && days.first?.dayOfTheWeek == .friday, "Got \(days)")
+        } else {
+            assertTest("'every Fri' daysOfTheWeek exists", false, "daysOfTheWeek was nil")
+        }
+        if let date = r28b.date {
+            let weekday = calendar.component(.weekday, from: date)
+            assertTest("'every Fri' date falls on Friday (weekday 6)", weekday == 6, "Got weekday \(weekday)")
+            let hour = calendar.component(.hour, from: date)
+            assertTest("'every Fri' defaults to 7:00 AM", hour == 7, "Got hour \(hour)")
+        } else {
+            assertTest("'every Fri' date exists", false, "date was nil")
+        }
+
+        let r28c = TextParser.parse(text: "Team sync every Friday at 10am")
+        assertTest("'every Friday at 10am' title clean", r28c.title == "Team sync", "Got '\(r28c.title)'")
+        assertTest("'every Friday at 10am' recurrence exists", r28c.recurrence != nil, "Recurrence was nil")
+        if let date = r28c.date {
+            let weekday = calendar.component(.weekday, from: date)
+            assertTest("'every Friday at 10am' falls on Friday", weekday == 6, "Got weekday \(weekday)")
+            let hour = calendar.component(.hour, from: date)
+            assertTest("'every Friday at 10am' sets 10:00 AM", hour == 10, "Got hour \(hour)")
+        } else {
+            assertTest("'every Friday at 10am' date exists", false, "date was nil")
+        }
+
+        let r28d = TextParser.parse(text: "Rubbish collection every other Monday")
+        assertTest("'every other Monday' title clean", r28d.title == "Rubbish collection", "Got '\(r28d.title)'")
+        assertRecurrenceDetails("'every other Monday' -> weekly, interval 2", r28d.recurrence, frequency: .weekly, interval: 2)
+        if let days = r28d.recurrence?.daysOfTheWeek {
+            assertTest("'every other Monday' produces Monday", days.count == 1 && days.first?.dayOfTheWeek == .monday, "Got \(days)")
+        } else {
+            assertTest("'every other Monday' daysOfTheWeek exists", false, "daysOfTheWeek was nil")
+        }
+
+        let r28e = TextParser.parse(text: "Water plants every Mon, Wed, Fri")
+        assertTest("'every Mon, Wed, Fri' title clean", r28e.title == "Water plants", "Got '\(r28e.title)'")
+        if let days = r28e.recurrence?.daysOfTheWeek {
+            assertTest("'every Mon, Wed, Fri' produces 3 days", days.count == 3, "Got \(days.count) days")
+        } else {
+            assertTest("'every Mon, Wed, Fri' daysOfTheWeek exists", false, "daysOfTheWeek was nil")
+        }
+
+        let r28f = TextParser.parse(text: "Standup every Mon to Fri")
+        assertTest("'every Mon to Fri' title clean", r28f.title == "Standup", "Got '\(r28f.title)'")
+        if let days = r28f.recurrence?.daysOfTheWeek {
+            assertTest("'every Mon to Fri' produces 5 days", days.count == 5, "Got \(days.count) days")
+        } else {
+            assertTest("'every Mon to Fri' daysOfTheWeek exists", false, "daysOfTheWeek was nil")
+        }
+
+        let r28g = TextParser.parse(text: "Gym on Mondays and Thursdays")
+        assertTest("'on Mondays and Thursdays' title clean", r28g.title == "Gym", "Got '\(r28g.title)'")
+        if let days = r28g.recurrence?.daysOfTheWeek {
+            assertTest("'on Mondays and Thursdays' produces 2 days", days.count == 2, "Got \(days.count) days")
+        } else {
+            assertTest("'on Mondays and Thursdays' daysOfTheWeek exists", false, "daysOfTheWeek was nil")
+        }
+
+        let r28h = TextParser.parse(text: "Dentist appointment on Friday")
+        assertTest("'on Friday' (singular) title clean", r28h.title == "Dentist appointment", "Got '\(r28h.title)'")
+        assertTest("'on Friday' (singular) is NOT recurring", r28h.recurrence == nil, "Expected nil recurrence, got \(String(describing: r28h.recurrence))")
+        assertTest("'on Friday' (singular) date exists", r28h.date != nil, "Date was nil")
+
         // 14. Fixed-Duration Recurrence ("for X days")
         print("\n--- 14. Fixed-Duration Recurrence ('for X days') ---")
         let r29 = TextParser.parse(text: "Take antibiotics for 7 days")

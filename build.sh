@@ -35,6 +35,10 @@ rm -f /tmp/regression_test_runner
 # Compile Swift files
 echo "Compiling Swift files..."
 swiftc source/*.swift -o "$MACOS_DIR/$APP_NAME" -target arm64-apple-macosx12.0
+
+echo "Copying App Icon..."
+cp AppIcon.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
+
 # Copy Info.plist
 echo "Copying Info.plist..."
 cp Info.plist "$APP_DIR/Contents/Info.plist"
