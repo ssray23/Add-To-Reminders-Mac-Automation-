@@ -233,8 +233,8 @@ struct QuickEntryView: View {
         let parsed = TextParser.parse(text: combined)
         
         let formattedDate = dateFormatter.string(from: date)
-        if parsed.recurrence != nil {
-            return "\(formattedDate) (Repeats daily)"
+        if let rec = parsed.recurrence {
+            return "\(formattedDate) (\(TextParser.formatRecurrenceLabel(rec)))"
         }
         return formattedDate
     }
@@ -262,7 +262,8 @@ struct QuickEntryView: View {
                 dfOnly.timeStyle = .none
                 let startDate = parsedCombined.date ?? selDate
                 let startString = dateFormatter.string(from: startDate)
-                return "Will set due date: \(startString) (Repeats daily until \(dfOnly.string(from: selDate)))"
+                let recLabel = TextParser.formatRecurrenceLabel(parsedCombined.recurrence!)
+                return "Will set due date: \(startString) (\(recLabel) until \(dfOnly.string(from: selDate)))"
             } else {
                 let selString = dateFormatter.string(from: selDate)
                 return "Will set due date: \(selString)"

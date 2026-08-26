@@ -595,6 +595,33 @@ struct RegressionTests {
             assertTest("'valid until' + '6 days' start date exists", false, "date was nil")
         }
 
+        // 44. Repeat every N days — interval must be preserved
+        print("\n--- 44. Repeat Every N Days/Weeks Interval Tests ---")
+        let r44 = TextParser.parse(text: "Document Payload Size ADR for Loyalty in 8 hours repeat every 3 days")
+        assertTest("'repeat every 3 days' title", r44.title == "Document Payload Size ADR for Loyalty", "Got '\(r44.title)'")
+        assertRecurrenceDetails("'repeat every 3 days' recurrence", r44.recurrence, frequency: .daily, interval: 3)
+
+        let r44b = TextParser.parse(text: "Review metrics repeat every 2 weeks")
+        assertRecurrenceDetails("'repeat every 2 weeks' recurrence", r44b.recurrence, frequency: .weekly, interval: 2)
+
+        let r44c = TextParser.parse(text: "Pay rent every 1 month")
+        assertRecurrenceDetails("'every 1 month' recurrence", r44c.recurrence, frequency: .monthly, interval: 1)
+
+        // 45. formatRecurrenceLabel — verify display strings
+        print("\n--- 45. formatRecurrenceLabel Display Tests ---")
+        if let rec = r44.recurrence {
+            let label = TextParser.formatRecurrenceLabel(rec)
+            assertTest("formatRecurrenceLabel 'every 3 days'", label == "Repeats every 3 days", "Got '\(label)'")
+        }
+        if let rec = r44b.recurrence {
+            let label = TextParser.formatRecurrenceLabel(rec)
+            assertTest("formatRecurrenceLabel 'every 2 weeks'", label == "Repeats every 2 weeks", "Got '\(label)'")
+        }
+        if let rec = r44c.recurrence {
+            let label = TextParser.formatRecurrenceLabel(rec)
+            assertTest("formatRecurrenceLabel 'every 1 month'", label == "Repeats monthly", "Got '\(label)'")
+        }
+
         // ============================================================
         // SUMMARY
         // ============================================================

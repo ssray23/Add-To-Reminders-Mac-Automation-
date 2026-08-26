@@ -37,6 +37,22 @@ class TextParser {
         return wordMap[string.lowercased()]
     }
 
+    static func formatRecurrenceLabel(_ rec: EKRecurrenceRule) -> String {
+        let interval = rec.interval
+        switch rec.frequency {
+        case .daily:
+            return interval == 1 ? "Repeats daily" : "Repeats every \(interval) days"
+        case .weekly:
+            return interval == 1 ? "Repeats weekly" : "Repeats every \(interval) weeks"
+        case .monthly:
+            return interval == 1 ? "Repeats monthly" : "Repeats every \(interval) months"
+        case .yearly:
+            return interval == 1 ? "Repeats yearly" : "Repeats every \(interval) years"
+        @unknown default:
+            return "Repeats"
+        }
+    }
+
     static func formatParsedDateFeedback(_ parsed: ParsedReminderData) -> String? {
         guard let date = parsed.date else { return nil }
         
@@ -50,20 +66,7 @@ class TextParser {
         
         var msg = df.string(from: date)
         if let rec = parsed.recurrence {
-            let freqStr: String
-            let interval = rec.interval
-            switch rec.frequency {
-            case .daily:
-                freqStr = interval == 1 ? "Repeats daily" : "Repeats every \(interval) days"
-            case .weekly:
-                freqStr = interval == 1 ? "Repeats weekly" : "Repeats every \(interval) weeks"
-            case .monthly:
-                freqStr = interval == 1 ? "Repeats monthly" : "Repeats every \(interval) months"
-            case .yearly:
-                freqStr = interval == 1 ? "Repeats yearly" : "Repeats every \(interval) years"
-            @unknown default:
-                freqStr = "Repeats"
-            }
+            let freqStr = formatRecurrenceLabel(rec)
             
             if let end = rec.recurrenceEnd?.endDate {
                 msg += " (\(freqStr) until " + dfOnly.string(from: end) + ")"
