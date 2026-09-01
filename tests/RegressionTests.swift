@@ -622,6 +622,34 @@ struct RegressionTests {
             assertTest("formatRecurrenceLabel 'every 1 month'", label == "Repeats monthly", "Got '\(label)'")
         }
 
+        // 46. Date Range Start Date & Recurrence Preservation ("16th to 20th October 2026")
+        print("\n--- 46. Date Range Start Date & Recurrence Preservation Tests ---")
+        let r46 = TextParser.parse(text: "Puja Celebration: Dates: 16th to 20th October 2026 (Friday to Tuesday)")
+        assertTest("'16th to 20th October 2026' recurrence exists", r46.recurrence != nil, "Recurrence was nil")
+        if let d = r46.date {
+            let day = calendar.component(.day, from: d)
+            let month = calendar.component(.month, from: d)
+            let year = calendar.component(.year, from: d)
+            let hour = calendar.component(.hour, from: d)
+            assertTest("'16th to 20th October 2026' start date is Oct 16 2026 at 7:00 AM", day == 16 && month == 10 && year == 2026 && hour == 7, "Got \(year)-\(month)-\(day) at \(hour):00")
+            assertTest("'16th to 20th October 2026' start date is NOT today", !calendar.isDate(d, inSameDayAs: Date()), "Start date incorrectly matched today")
+        } else {
+            assertTest("'16th to 20th October 2026' start date exists", false, "Date was nil")
+        }
+        if let end = r46.recurrence?.recurrenceEnd?.endDate {
+            let endDay = calendar.component(.day, from: end)
+            let endMonth = calendar.component(.month, from: end)
+            let endYear = calendar.component(.year, from: end)
+            assertTest("'16th to 20th October 2026' end date is Oct 20 2026", endDay == 20 && endMonth == 10 && endYear == 2026, "Got \(endYear)-\(endMonth)-\(endDay)")
+        } else {
+            assertTest("'16th to 20th October 2026' end date exists", false, "End date was nil")
+        }
+        if let feedback = TextParser.formatParsedDateFeedback(r46) {
+            assertTest("formatParsedDateFeedback shows start and until end", feedback.contains("16 Oct 2026") && feedback.contains("until 20 Oct 2026"), "Got '\(feedback)'")
+        } else {
+            assertTest("formatParsedDateFeedback is non-nil", false, "Feedback was nil")
+        }
+
         // ============================================================
         // SUMMARY
         // ============================================================

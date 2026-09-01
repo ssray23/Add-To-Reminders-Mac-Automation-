@@ -28,7 +28,7 @@ The project operates as a headless macOS Background Service that listens for Pas
 - **`RemindersManager.swift`:** Uses `EventKit` (`EKEventStore`) to safely request authorization and save the reminder directly to a list named after the user's OS first name (e.g. "Suddha"), falling back to default lists if none are found.
 - **`HUDWindowController.swift` & `AnimationView.swift`:** Handles the immediate visual feedback via a borderless, transparent `NSWindow` hosting a SwiftUI view.
 - **`NotificationHelper.swift`:** Formats the final due date with ordinal suffixes and uses a background AppleScript (`osascript`) command to seamlessly trigger a native notification from the Reminders app.
-- **`tests/RegressionTests.swift`:** Automated test suite running 152 assertions on parser logic, day-of-week recurrences, frequency and interval formatting, relative date calculation, typo fixes, tricky words, URL extraction, and recurrence rules.
+- **`tests/RegressionTests.swift`:** Automated test suite running 157 assertions on parser logic, day-of-week recurrences, date range preservation, frequency and interval formatting, relative date calculation, typo fixes, tricky words, URL extraction, and recurrence rules.
 - **`build.sh`:** A custom bash script that runs the regression test suite, compiles the Swift files, structures the `.app` bundle directly in `~/Applications` (avoiding iCloud sync issues), copies the `Info.plist`, bundles the official Reminders `AppIcon.icns`, strips extended attributes, applies an ad-hoc code signature, and dynamically updates the macOS Services registry (`/System/Library/CoreServices/pbs`).
 
 ## How to Build & Run
