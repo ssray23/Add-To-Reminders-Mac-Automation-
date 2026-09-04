@@ -632,10 +632,10 @@ class TextParser {
                     EKRecurrenceDayOfWeek(.saturday),
                     EKRecurrenceDayOfWeek(.sunday)
                 ]),
-                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?(every\\s*day|daily)\\b", .daily, 1, nil),
-                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?(every\\s*week|weekly)\\b", .weekly, 1, nil),
-                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?(every\\s*month|monthly)\\b", .monthly, 1, nil),
-                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?(every\\s*year|yearly)\\b", .yearly, 1, nil),
+                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?(every\\s*day|daily)\\b|(?i)\\b(?:repeat|repeats|repeating)\\s+day\\b", .daily, 1, nil),
+                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?(every\\s*week|weekly)\\b|(?i)\\b(?:repeat|repeats|repeating)\\s+week\\b", .weekly, 1, nil),
+                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?(every\\s*month|monthly)\\b|(?i)\\b(?:repeat|repeats|repeating)\\s+month\\b", .monthly, 1, nil),
+                ("(?i)\\b(?:repeat\\s+|repeats\\s+|repeating\\s+)?(every\\s*year|yearly|annually)\\b|(?i)\\b(?:repeat|repeats|repeating)\\s+(?:annual|year)\\b", .yearly, 1, nil),
                 ("(?i)\\b(repeat|repeats|repeating)\\b(?=\\s+(?:for|until|ending|ends))", .daily, 1, nil)
             ]
             
@@ -1087,6 +1087,7 @@ class TextParser {
             "moth": "month",
             "mounth": "month",
             "mounths": "months",
+            "yea": "year",
             "yera": "year",
             "yeras": "years",
             "yer": "year",
@@ -1095,6 +1096,8 @@ class TextParser {
             "yrs": "years",
 
             // --- FREQUENCY & MISC ---
+            "anually": "annually",
+            "annualy": "annually",
             "dailey": "daily",
             "daly": "daily",
             "everi": "every",
@@ -1105,7 +1108,10 @@ class TextParser {
             "mounthly": "monthly",
             "weekely": "weekly",
             "wekly": "weekly",
-            "wkly": "weekly"
+            "wkly": "weekly",
+            "yealy": "yearly",
+            "yearley": "yearly",
+            "yerly": "yearly"
         ]
         
         let ordinalFixes = [
@@ -1298,8 +1304,9 @@ class TextParser {
         var finalTitle = components.filter { !$0.isEmpty }.joined(separator: " ")
         finalTitle = finalTitle.replacingOccurrences(of: "[\\.:\\-,\\s]+$", with: "", options: .regularExpression)
         
-        // Remove leading punctuation like commas or dashes if they are somehow present,
-        // though trimming whitespaces above is usually enough. 
+        // Remove leading punctuation like dots, commas or dashes if they are somehow present
+        finalTitle = finalTitle.replacingOccurrences(of: "^[\\.:\\-,\\s]+", with: "", options: .regularExpression)
+        
         if finalTitle.isEmpty {
             finalTitle = "New Reminder"
         }

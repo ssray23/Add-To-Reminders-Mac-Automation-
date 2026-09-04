@@ -139,28 +139,18 @@ import EventKit
     
     private func applySelectedDate(selectedDate: Date, to parsedData: ParsedReminderData, originalParsedData: ParsedReminderData?) -> ParsedReminderData {
         var startDate = selectedDate
-        var recRule = parsedData.recurrence ?? originalParsedData?.recurrence
-        
-        let hasExplicitRecurrence = (parsedData.recurrence != nil || originalParsedData?.recurrence != nil)
+        let recRule = parsedData.recurrence ?? originalParsedData?.recurrence
         
         // If the parser already produced a recurrence rule with an end date
         // (e.g. from a date range like "16th to 20th October"), the start date
         // and recurrence are already correct — preserve them as-is.
-        let parserRecurrenceHasEnd = (parsedData.recurrence?.recurrenceEnd?.endDate != nil)
-        
-        if hasExplicitRecurrence && !parserRecurrenceHasEnd && !Calendar.current.isDateInToday(selectedDate) {
-            recRule = EKRecurrenceRule(recurrenceWith: .daily, interval: 1, daysOfTheWeek: nil, daysOfTheMonth: nil, monthsOfTheYear: nil, weeksOfTheYear: nil, daysOfTheYear: nil, setPositions: nil, end: EKRecurrenceEnd(end: TextParser.endOfDay(for: selectedDate)))
-            var startComps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-            startComps.hour = 7
-            startComps.minute = 0
-            startComps.second = 0
-            if let s = Calendar.current.date(from: startComps) {
-                startDate = s
-            }
-        } else if parserRecurrenceHasEnd {
+        let parserRecurrenceHasEnd = (recRule?.recurrenceEnd?.endDate != nil)
+        if parserRecurrenceHasEnd {
             // Date range was parsed — use the parser's start date (from parsedData.date),
             // not the selectedDate from the multi-date picker
             startDate = parsedData.date ?? selectedDate
+        } else if let parsedStartDate = parsedData.date {
+            startDate = parsedStartDate
         }
         
         return ParsedReminderData(title: parsedData.title, date: startDate, allDetectedDates: parsedData.allDetectedDates, url: parsedData.url, recurrence: recRule, datePhrase: parsedData.datePhrase)

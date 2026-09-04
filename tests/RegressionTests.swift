@@ -650,6 +650,73 @@ struct RegressionTests {
             assertTest("formatParsedDateFeedback is non-nil", false, "Feedback was nil")
         }
 
+        // 47. Recurrence Patterns ('repeat year/month/week/day', 'annually'), Typos ('yea'), & Title Leading Punctuation
+        print("\n--- 47. Recurrence Patterns, Typos, & Title Leading Punctuation Tests ---")
+        let r47a = TextParser.parse(text: "BST to GMT repeat year")
+        assertTest("'repeat year' title is 'BST to GMT'", r47a.title == "BST to GMT", "Got '\(r47a.title)'")
+        assertTest("'repeat year' recurrence is yearly", r47a.recurrence?.frequency == .yearly, "Got \(String(describing: r47a.recurrence?.frequency))")
+
+        let r47b = TextParser.parse(text: "BST to GMT repeat yearly")
+        assertTest("'repeat yearly' title is 'BST to GMT'", r47b.title == "BST to GMT", "Got '\(r47b.title)'")
+        assertTest("'repeat yearly' recurrence is yearly", r47b.recurrence?.frequency == .yearly, "Got \(String(describing: r47b.recurrence?.frequency))")
+
+        let r47c = TextParser.parse(text: "BST to GMT repeat annually")
+        assertTest("'repeat annually' title is 'BST to GMT'", r47c.title == "BST to GMT", "Got '\(r47c.title)'")
+        assertTest("'repeat annually' recurrence is yearly", r47c.recurrence?.frequency == .yearly, "Got \(String(describing: r47c.recurrence?.frequency))")
+
+        let r47d = TextParser.parse(text: "BST to GMT annually")
+        assertTest("'annually' title is 'BST to GMT'", r47d.title == "BST to GMT", "Got '\(r47d.title)'")
+        assertTest("'annually' recurrence is yearly", r47d.recurrence?.frequency == .yearly, "Got \(String(describing: r47d.recurrence?.frequency))")
+
+        let r47e = TextParser.parse(text: "BST to GMT repeat yea")
+        assertTest("'repeat yea' typo resolves to 'BST to GMT'", r47e.title == "BST to GMT", "Got '\(r47e.title)'")
+        assertTest("'repeat yea' recurrence is yearly", r47e.recurrence?.frequency == .yearly, "Got \(String(describing: r47e.recurrence?.frequency))")
+
+        let r47f = TextParser.parse(text: "Team sync repeat month")
+        assertTest("'repeat month' title is 'Team sync'", r47f.title == "Team sync", "Got '\(r47f.title)'")
+        assertTest("'repeat month' recurrence is monthly", r47f.recurrence?.frequency == .monthly, "Got \(String(describing: r47f.recurrence?.frequency))")
+
+        let r47g = TextParser.parse(text: "One on one repeat week")
+        assertTest("'repeat week' title is 'One on one'", r47g.title == "One on one", "Got '\(r47g.title)'")
+        assertTest("'repeat week' recurrence is weekly", r47g.recurrence?.frequency == .weekly, "Got \(String(describing: r47g.recurrence?.frequency))")
+
+        let r47h = TextParser.parse(text: "Team standup repeat day")
+        assertTest("'repeat day' title is 'Team standup'", r47h.title == "Team standup", "Got '\(r47h.title)'")
+        assertTest("'repeat day' recurrence is daily", r47h.recurrence?.frequency == .daily, "Got \(String(describing: r47h.recurrence?.frequency))")
+
+        let r47i = TextParser.parse(text: "Annual report")
+        assertTest("'Annual report' is not treated as recurring", r47i.recurrence == nil, "Got recurrence \(String(describing: r47i.recurrence))")
+        assertTest("'Annual report' title preserved", r47i.title == "Annual report", "Got '\(r47i.title)'")
+
+        let r47j = TextParser.parse(text: "Sunday, 25 October. GOV.UK At 2:00 AM")
+        assertTest("'Sunday, 25 October. GOV.UK At 2:00 AM' title stripped leading dot", r47j.title == "GOV.UK", "Got '\(r47j.title)'")
+        if let d = r47j.date {
+            let day = calendar.component(.day, from: d)
+            let month = calendar.component(.month, from: d)
+            let hour = calendar.component(.hour, from: d)
+            assertTest("'Sunday, 25 October. GOV.UK At 2:00 AM' date is Oct 25 at 2:00 AM", day == 25 && month == 10 && hour == 2, "Got day \(day), month \(month), hour \(hour)")
+        } else {
+            assertTest("'Sunday, 25 October. GOV.UK At 2:00 AM' date parsed", false, "Date was nil")
+        }
+
+        let r47k = TextParser.parse(text: "BST to GMT repeat yearly 25 Oct 2026 at 2:00 am")
+        assertTest("'BST to GMT repeat yearly 25 Oct 2026 at 2:00 am' title clean", r47k.title == "BST to GMT", "Got '\(r47k.title)'")
+        assertTest("'BST to GMT repeat yearly 25 Oct 2026 at 2:00 am' recurrence is yearly", r47k.recurrence?.frequency == .yearly, "Got \(String(describing: r47k.recurrence?.frequency))")
+        if let d = r47k.date {
+            let day = calendar.component(.day, from: d)
+            let month = calendar.component(.month, from: d)
+            let year = calendar.component(.year, from: d)
+            let hour = calendar.component(.hour, from: d)
+            assertTest("'BST to GMT repeat yearly 25 Oct 2026 at 2:00 am' date is Oct 25 2026 at 2:00 AM", day == 25 && month == 10 && year == 2026 && hour == 2, "Got \(year)-\(month)-\(day) at \(hour):00")
+        } else {
+            assertTest("'BST to GMT repeat yearly 25 Oct 2026 at 2:00 am' date parsed", false, "Date was nil")
+        }
+        if let feedback = TextParser.formatParsedDateFeedback(r47k) {
+            assertTest("formatParsedDateFeedback shows '25 Oct 2026 at 2:00 am (Repeats yearly)'", feedback.contains("25 Oct 2026 at 2:00") && feedback.contains("Repeats yearly"), "Got '\(feedback)'")
+        } else {
+            assertTest("formatParsedDateFeedback is non-nil", false, "Feedback was nil")
+        }
+
         // ============================================================
         // SUMMARY
         // ============================================================

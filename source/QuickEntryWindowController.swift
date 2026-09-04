@@ -45,14 +45,32 @@ class QuickEntryWindowController: NSWindowController, NSWindowDelegate {
             NSApp.activate(ignoringOtherApps: true)
         }
         
-        self.window?.makeKeyAndOrderFront(nil)
-        
         let view = QuickEntryView(prompt: prompt, titlePlaceholder: titlePlaceholder, datePlaceholder: datePlaceholder, titleText: initialTitle, dateText: initialDate, detectedDates: detectedDates) { [weak self] result in
             self?.closeWindow()
             completion(result)
         }
         
-        self.window?.contentView = NSHostingView(rootView: view)
+        let hostingView = NSHostingView(rootView: view)
+        self.window?.contentView = hostingView
+        
+        if let window = self.window {
+            window.layoutIfNeeded()
+            let fittingSize = hostingView.fittingSize
+            let targetWidth: CGFloat = 600
+            let targetHeight = max(fittingSize.height, 220)
+            
+            let screen = window.screen ?? NSScreen.main ?? NSScreen.screens.first
+            if let screen = screen {
+                let screenFrame = screen.visibleFrame
+                let newX = screenFrame.midX - (targetWidth / 2.0)
+                let newY = max(screenFrame.minY + 20, min(screenFrame.midY - (targetHeight / 2.0), screenFrame.maxY - targetHeight - 20))
+                window.setFrame(NSRect(x: newX, y: newY, width: targetWidth, height: targetHeight), display: true, animate: false)
+            } else {
+                window.center()
+            }
+            
+            window.makeKeyAndOrderFront(nil)
+        }
     }
     
     private func closeWindow() {
@@ -103,13 +121,6 @@ struct QuickEntryView: View {
         let titleTrimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
         let dateTrimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        if !titleTrimmed.isEmpty {
-            let parsedTitle = TextParser.parse(text: titleTrimmed)
-            if parsedTitle.date != nil || parsedTitle.recurrence != nil {
-                return parsedTitle
-            }
-        }
-        
         let combined = (titleTrimmed + " " + dateTrimmed).trimmingCharacters(in: .whitespacesAndNewlines)
         if combined.isEmpty {
             return nil
@@ -120,10 +131,20 @@ struct QuickEntryView: View {
     private func updateDateTextFromTitleLive() {
         guard focusedField != .date else { return }
         let titleTrimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !titleTrimmed.isEmpty {
-            let parsed = TextParser.parse(text: titleTrimmed)
-            if parsed.date != nil || parsed.recurrence != nil {
-                if let feedback = TextParser.formatParsedDateFeedback(parsed) {
+        guard !titleTrimmed.isEmpty else { return }
+        
+        let dateTrimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parsedTitle = TextParser.parse(text: titleTrimmed)
+        
+        if parsedTitle.date != nil || parsedTitle.recurrence != nil {
+            if !dateTrimmed.isEmpty {
+                let combined = "\(titleTrimmed) \(dateTrimmed)"
+                let parsedCombined = TextParser.parse(text: combined)
+                if let feedback = TextParser.formatParsedDateFeedback(parsedCombined) {
+                    self.dateText = feedback
+                }
+            } else {
+                if let feedback = TextParser.formatParsedDateFeedback(parsedTitle) {
                     self.dateText = feedback
                 }
             }
@@ -145,13 +166,24 @@ struct QuickEntryView: View {
         let titleTrimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !titleTrimmed.isEmpty else { return }
         
+        let dateTrimmed = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
         let parsed = TextParser.parse(text: titleTrimmed)
+        
         if (parsed.date != nil || parsed.recurrence != nil) && parsed.title != titleTrimmed {
-            let finalDateText = TextParser.formatParsedDateFeedback(parsed) ?? ""
+            var finalDateText = ""
+            if !dateTrimmed.isEmpty {
+                let combined = "\(titleTrimmed) \(dateTrimmed)"
+                let parsedCombined = TextParser.parse(text: combined)
+                finalDateText = TextParser.formatParsedDateFeedback(parsedCombined) ?? TextParser.formatParsedDateFeedback(parsed) ?? ""
+            } else {
+                finalDateText = TextParser.formatParsedDateFeedback(parsed) ?? ""
+            }
             
             isSeparating = true
             self.titleText = parsed.title
-            self.dateText = finalDateText
+            if !finalDateText.isEmpty {
+                self.dateText = finalDateText
+            }
             DispatchQueue.main.async {
                 self.isSeparating = false
             }
