@@ -48,11 +48,15 @@ The project operates as a headless macOS Background Service that listens for Pas
    - *Note: On the first run, macOS will ask for permission to access your Reminders. Because the app stays running in the background, it will remember this permission permanently.*
 
 ## How to Install on Another Mac
-Because this app is self-contained, you do not need Xcode or the terminal to install it on another Mac.
+Because this app is self-contained, you do not need Xcode or developer tools to install it on any Apple Silicon Mac (M1/M2/M3/M4).
 
 1. Download or copy the pre-packaged **`AddToReminders_Install.zip`** to the new Mac.
-2. Unzip it and drag the **`AddToReminders.app`** into your **Applications** folder.
-3. **Right-Click** the app and select **"Open"**. 
-   - *Note: You must Right-Click -> Open the very first time to bypass macOS Gatekeeper, as this app is not signed with a paid Apple Developer certificate.*
-4. The app will launch silently in the background. macOS will scan it and automatically register the global service.
-5. Enable the shortcut by going to **System Settings > Keyboard > Keyboard Shortcuts > Services** and ensuring **Add to Reminders** is checked.
+2. Unzip it and drag **`AddToReminders.app`** into your **Applications** folder.
+3. Open the app:
+   - **macOS 14 Sonoma or older**: **Right-Click** `AddToReminders.app` and select **"Open"**, then click **Open** in the confirmation dialog.
+   - **macOS 15 Sequoia**: Double-click to open it once. When blocked by Gatekeeper, go to **System Settings > Privacy & Security**, scroll down to the **Security** section, and click **"Open Anyway"**.
+4. The app runs silently in the background (`LSUIElement`).
+5. Enable the service:
+   - Go to **System Settings > Keyboard > Keyboard Shortcuts > Services**.
+   - Under **Text**, ensure **Add to Reminders** is checked (you can also assign a custom shortcut like `Cmd + Shift + R`).
+6. When adding a reminder for the first time, click **Allow** on the macOS prompt requesting access to Reminders.
